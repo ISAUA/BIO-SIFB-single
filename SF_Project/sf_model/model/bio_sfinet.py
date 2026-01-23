@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
+import torch.nn.functional as F  # [新增] 用于激活函数
+from torch_geometric.nn import GCNConv  # [新增] 用于 RNA 动态更新
 from .encoders import RNA_Encoder, ATAC_Encoder
 from .sfib import SFIB
 
 # ==========================================
-# 1. 新增: 从 GraphTransformer 迁移过来的解码器组件
+# 1. 解码器组件 (保持你提供的 DeepDecoder)
 # ==========================================
 
 class ResidualBlock(nn.Module):
-    """标准残差块（Pre-LN）：两层子层并做残差连接。
-    来源: GraphTransformer
-    """
+    """标准残差块（Pre-LN）：两层子层并做残差连接。"""
     def __init__(self, hidden_dim: int, dropout: float = 0.1):
         super().__init__()
         hidden_dim = int(hidden_dim)
@@ -34,9 +34,7 @@ class ResidualBlock(nn.Module):
 
 
 class DeepDecoder(nn.Module):
-    """Residual Deep Decoder (Projection + Residual Stack + Output).
-    来源: GraphTransformer
-    """
+    """Residual Deep Decoder (Projection + Residual Stack + Output)."""
     def __init__(
         self,
         in_dim: int,
@@ -75,7 +73,7 @@ class DeepDecoder(nn.Module):
 
 
 # ==========================================
-# 2. 修改后的 BioSFINet 主模型
+# 2. 修改后的 BioSFINet 主模型 (集成动态指导)
 # ==========================================
 
 class BioSFINet(nn.Module):
@@ -97,31 +95,34 @@ class BioSFINet(nn.Module):
         atac_dropout = model_cfg.get('atac_dropout', model_cfg.get('dropout', 0.1))
         n_layers = int(model_cfg.get('n_layers', 2))
         
-        # 1. Encoders (Phase I) - 保持不变
+        # 1. Encoders (Phase I)
         self.rna_enc = RNA_Encoder(in_dim=rna_dim, hidden_dim=hidden_dim, n_heads=rna_heads, dropout=rna_dropout)
         self.atac_enc = ATAC_Encoder(in_dim=atac_dim, hidden_dim=hidden_dim, dropout=atac_dropout)
         
-        # 2. Projections (Phase II) - 保持不变
+        # 2. Projections (Phase II)
         self.rna_proj = nn.Linear(hidden_dim, sfib_dim)
         self.atac_proj = nn.Linear(hidden_dim, sfib_dim)
         self.ln_rna = nn.LayerNorm(sfib_dim)
         self.ln_atac = nn.LayerNorm(sfib_dim)
         
-        # 3. Cascade SFIB Tower - 保持不变
+        # 3. Cascade SFIB Tower
         self.sfib_atac = nn.ModuleList([SFIB(dim=sfib_dim) for _ in range(n_layers)])
         
-        # 4. Decoders (Phase IV) - [核心修改区域]
-        # 原代码:
-        # self.rna_dec = nn.Linear(sfib_dim, rna_dim)
-        # self.atac_dec = nn.Linear(sfib_dim, atac_dim)
+        # --- [NEW] RNA Update Stream (Guide Evolution) ---
+        # 使用 GCNConv 在图上更新 RNA 特征，模拟论文中的 feature flow
+        # 需要 n_layers - 1 个更新层
+        if n_layers > 1:
+            self.rna_updates = nn.ModuleList([
+                GCNConv(sfib_dim, sfib_dim) for _ in range(n_layers - 1)
+            ])
+        else:
+            self.rna_updates = nn.ModuleList([])
         
-        # 新代码: 使用 DeepDecoder
-        # 参数说明: in_dim=sfib特征维度, out_dim=原始表达维度
-        # hidden_dim 和 n_blocks 参考 GraphTransformer 的配置 (RNA=1024, ATAC=2048)
+        # 4. Decoders (Phase IV) - 使用 DeepDecoder
         self.rna_dec = DeepDecoder(
             in_dim=sfib_dim, 
             out_dim=rna_dim, 
-            hidden_dim=256,  # 增强容量
+            hidden_dim=256,
             n_blocks=1, 
             dropout=rna_dropout
         )
@@ -129,7 +130,7 @@ class BioSFINet(nn.Module):
         self.atac_dec = DeepDecoder(
             in_dim=sfib_dim, 
             out_dim=atac_dim, 
-            hidden_dim=512,  # ATAC通常更稀疏，给予更大容量
+            hidden_dim=512,
             n_blocks=1, 
             dropout=atac_dropout
         )
@@ -143,15 +144,30 @@ class BioSFINet(nn.Module):
         f_rna = self.ln_rna(self.rna_proj(h_rna))
         f_atac = self.ln_atac(self.atac_proj(h_atac))
         
-        # 3. Cascade SFIB tower guided by RNA (static guide)
+        # 3. Cascade SFIB tower (Dynamic Guide Loop)
         curr_atac = f_atac
-        for block in self.sfib_atac:
-            updated = block(x_main=curr_atac, x_guide=f_rna, edge_index=edge_index, u_basis=u_basis)
-            curr_atac = updated + curr_atac
+        curr_rna = f_rna  # RNA 初始化为投影后的特征
+        
+        for i, block in enumerate(self.sfib_atac):
+            # A. 执行当前层的融合
+            # 使用当前的 curr_rna 指导 curr_atac
+            updated_atac = block(x_main=curr_atac, x_guide=curr_rna, edge_index=edge_index, u_basis=u_basis)
+            curr_atac = updated_atac + curr_atac # ATAC 残差更新
+            
+            # B. 准备下一层的 RNA Guide (如果是最后一层则跳过)
+            # 逻辑：利用 GCN 聚合邻域信息，使 RNA 特征随层级加深而演化
+            if i < len(self.rna_updates):
+                update_layer = self.rna_updates[i]
+                
+                # GCN 更新
+                delta_rna = update_layer(curr_rna, edge_index)
+                
+                # RNA 残差更新 + ELU 激活 (增加非线性)
+                curr_rna = F.elu(delta_rna + curr_rna)
+        
         z_fused = curr_atac
         
         # 4. Decode (dual reconstruction from fused latent)
-        # DeepDecoder 的调用接口与 nn.Linear 一致，直接传入即可
         rec_rna = self.rna_dec(z_fused)
         rec_atac = self.atac_dec(z_fused)
 

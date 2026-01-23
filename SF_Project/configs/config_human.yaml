@@ -14,7 +14,7 @@ eval:                               # 评估相关设置
   checkpoint: "best"               # 默认使用哪个检查点（key 名，可在 checkpoints 映射中定义）
   checkpoints:                      # key->文件名映射，可自由扩展
     best: "ckpt_best.pth"
-    final: "ckpt_200.pth"
+    final: "ckpt_600.pth"
 
 # ------------------------------------------
 # 1. 数据路径与预处理参数

@@ -37,10 +37,16 @@ class SFTrainer:
         # Forward
         z_fused, rec_rna, rec_atac = self.model(rna_feat, atac_feat, edge_index, u_basis, evals)
         
-        # Loss Calculation
-        # 1. Recon Loss
-        loss_rec_rna = F.mse_loss(rec_rna, rna_feat)
-        loss_rec_atac = F.mse_loss(rec_atac, atac_feat)
+        # Loss Calculation (Weighted MSE: positive entries get amplified weight)
+        def weighted_mse(pred: torch.Tensor, target: torch.Tensor, pos_w: float) -> torch.Tensor:
+            weight = torch.where(target > 0, torch.tensor(pos_w, device=target.device, dtype=target.dtype), torch.tensor(1.0, device=target.device, dtype=target.dtype))
+            return (weight * (pred - target).pow(2)).mean()
+
+        pos_w_rna = float(self.config['train'].get('pos_weight_rna', 1.0))
+        pos_w_atac = float(self.config['train'].get('pos_weight_atac', 1.0))
+
+        loss_rec_rna = weighted_mse(rec_rna, rna_feat, pos_w_rna)
+        loss_rec_atac = weighted_mse(rec_atac, atac_feat, pos_w_atac)
         
         # Total Loss
         lambda_r = self.config['train'].get('lambda_rna', 1.0)

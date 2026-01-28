@@ -71,6 +71,8 @@ train:
   weight_decay: 1e-4                 # 权重衰减
   lambda_rna: 1.0                    # RNA 重构损失权重
   lambda_atac: 1.0                   # ATAC 重构损失权重
+  pos_weight_rna: 10.0               # Weighted MSE 正类权重 (RNA)
+  pos_weight_atac: 20.0              # Weighted MSE 正类权重 (ATAC)
   save_every: 50                     # 周期性保存间隔
   device: "cuda"                    # 设备
   log_interval: 10                   # 日志打印间隔（轮）

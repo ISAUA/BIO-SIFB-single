@@ -51,20 +51,15 @@ data:
 # 2. 模型架构参数
 # ------------------------------------------
 model:
-  name: "SFNet"                     # 模型名称
+  name: "Mono-SFINet"               # 单塔频域-空域分解模型
   rna_in_dim: 3000                   # RNA 输入维度（高变基因数）
-  hidden_dim: 512                    # 编码器隐藏维度
-  rna_n_heads: 4                     # RNA GAT 头数
-  rna_dropout: 0.1                   # RNA 编码器 dropout
-  atac_dropout: 0.1                  # ATAC 编码器 dropout
-  n_heads: 4                         # 备用头数（保持一致）
-  dropout: 0.1                       # 通用 dropout
-  grid_size: 128                     # 网格大小（如有使用）
-  latent_dim: 50                     # 潜变量维度（如有使用）
-  sfib_dim: 128                      # SFIB 特征维度
-  n_layers: 2                        # 级联 SFIB 层数
-  proj_hidden_dim: 64                # 对比投影头隐藏维度
-  proj_output_dim: 64                # 对比投影头输出维度
+  hidden_dim: 512                    # 模态投影隐藏维度
+  sfib_dim: 128                      # 融合隐空间维度 (= 单塔宽度)
+  gate_hidden_dim: 256               # 模态自适应门控的隐藏宽度
+  n_heads: 4                         # GATv2 头数 (细节注入)
+  dropout: 0.1                       # 通用 dropout（投影/解码）
+  gat_dropout: 0.1                   # 空域细节分支的 dropout
+  freq_decay_init: 0.8               # 频域软低通的初始衰减系数
 
 # ------------------------------------------
 # 3. 训练策略参数

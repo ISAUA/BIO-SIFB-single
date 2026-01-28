@@ -141,6 +141,9 @@ def main():
     coords = data_dict["coords"].to(device)
     edge_index = data_dict["edge_index"].to(device)
     u_basis = data_dict["u_basis"].to(device)
+    evals = data_dict.get("evals")
+    if evals is not None:
+        evals = evals.to(device)
     atac_dim = data_dict["atac_dim"]
 
     # 3. 初始化模型
@@ -170,7 +173,7 @@ def main():
     print("\n🔮 Running Inference...")
     with torch.no_grad():
         # Forward pass
-        outputs = model(rna_feat, atac_feat, edge_index, u_basis)
+        outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals)
         z_fused = outputs[0]
         
         # 级联 SFIB 后的融合潜变量直接作为最终表征

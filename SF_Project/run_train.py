@@ -41,6 +41,7 @@ def main():
     coords = data_dict["coords"]
     edge_index = data_dict["edge_index"]
     u_basis = data_dict["u_basis"]
+    evals = data_dict.get("evals")
     atac_dim = data_dict["atac_dim"]
     
     print(f"   -> RNA Shape: {rna_feat.shape}")
@@ -57,7 +58,7 @@ def main():
     
     # 5. 开始训练
     print("\n🟢 STARTING TRAINING...")
-    trainer.run(rna_feat, atac_feat, edge_index, u_basis)
+    trainer.run(rna_feat, atac_feat, edge_index, u_basis, evals)
 
 if __name__ == "__main__":
     main()

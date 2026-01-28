@@ -9,15 +9,16 @@ from sklearn.neighbors import NearestNeighbors
 
 def build_spatial_graph(coords, k=10):
     """
-    构建空间 KNN 图并计算 GFT 基底。
-    对应框架: Phase 1 - Global Graph Basis Construction
-    
+    构建空间 KNN 图，返回频域基底与特征值。
+    对应 Mono-SFINet 的 Phase II：频域基底提取。
+
     Args:
         coords: [N, 2] 原始物理坐标 (numpy array)
         k: 近邻数
     Returns:
-        edge_index: [2, E] 图的边索引 (供 GAT/GNN 使用)
-        u_basis: [N, N] 拉普拉斯矩阵的特征向量矩阵 (供 GFT 使用)
+        edge_index: [2, E] 图的边索引 (供 GNN 使用)
+        u_basis: [N, N] 拉普拉斯矩阵的特征向量矩阵 (GFT 基底)
+        evals: [N] 拉普拉斯特征值 (频率)，已按升序排列
     """
     N = coords.shape[0]
     
@@ -55,16 +56,17 @@ def build_spatial_graph(coords, k=10):
     # L = U * Lambda * U^T
     # 对于 N=2500，dense solver (eigh) 速度很快
     evals, evecs = np.linalg.eigh(laplacian.toarray())
-    
+
     # 排序 (低频 -> 高频)
     idx = np.argsort(evals)
-    # evals = evals[idx]
+    evals = evals[idx]
     evecs = evecs[:, idx]
-    
+
     # 转为 Tensor
     u_basis = torch.FloatTensor(evecs)
-    
-    return edge_index, u_basis
+    evals = torch.FloatTensor(evals)
+
+    return edge_index, u_basis, evals
 
 
 def set_seed(seed: int = 42, deterministic: bool = True):

@@ -23,7 +23,7 @@ class SFTrainer:
         self.best_name = config['train'].get('best_name', 'ckpt_best.pth')
         self.best_path = os.path.join(self.save_dir, self.best_name)
 
-    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis):
+    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, evals):
         self.model.train()
         self.optimizer.zero_grad()
         
@@ -32,9 +32,10 @@ class SFTrainer:
         atac_feat = atac_feat.to(self.device)
         edge_index = edge_index.to(self.device)
         u_basis = u_basis.to(self.device)
+        evals = evals.to(self.device) if evals is not None else None
         
         # Forward
-        z_fused, rec_rna, rec_atac = self.model(rna_feat, atac_feat, edge_index, u_basis)
+        z_fused, rec_rna, rec_atac = self.model(rna_feat, atac_feat, edge_index, u_basis, evals)
         
         # Loss Calculation
         # 1. Recon Loss
@@ -56,12 +57,12 @@ class SFTrainer:
             "rec_atac": loss_rec_atac.item()
         }
 
-    def run(self, rna_data, atac_data, edge_index, u_basis):
+    def run(self, rna_data, atac_data, edge_index, u_basis, evals=None):
         epochs = self.config['train']['epochs']
         best_loss = float('inf')
 
         for epoch in range(1, epochs + 1):
-            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis)
+            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, evals)
 
             if metrics['total'] < best_loss:
                 best_loss = metrics['total']

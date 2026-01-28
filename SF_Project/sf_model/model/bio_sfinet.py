@@ -1,16 +1,16 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F  # [新增] 用于激活函数
-from torch_geometric.nn import GCNConv  # [新增] 用于 RNA 动态更新
-from .encoders import RNA_Encoder, ATAC_Encoder
-from .sfib import SFIB
+import torch.nn.functional as F
+from torch_geometric.nn import GATv2Conv
 
 # ==========================================
-# 1. 解码器组件 (保持你提供的 DeepDecoder)
+# 1. 解码器组件 (保留 DeepDecoder 以重构两模态)
 # ==========================================
+
 
 class ResidualBlock(nn.Module):
-    """标准残差块（Pre-LN）：两层子层并做残差连接。"""
+    """两层前归一化残差块，用于 DeepDecoder。"""
+
     def __init__(self, hidden_dim: int, dropout: float = 0.1):
         super().__init__()
         hidden_dim = int(hidden_dim)
@@ -29,12 +29,12 @@ class ResidualBlock(nn.Module):
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x + self.block(x)
-        return x
+        return x + self.block(x)
 
 
 class DeepDecoder(nn.Module):
     """Residual Deep Decoder (Projection + Residual Stack + Output)."""
+
     def __init__(
         self,
         in_dim: int,
@@ -47,20 +47,17 @@ class DeepDecoder(nn.Module):
         hidden_dim = int(hidden_dim)
         n_blocks = int(n_blocks)
 
-        # 1. 投影到高维隐空间
         self.proj = nn.Sequential(
             nn.Linear(int(in_dim), hidden_dim),
             nn.LayerNorm(hidden_dim),
             nn.GELU(),
             nn.Dropout(dropout),
         )
-        
-        # 2. 残差堆叠
+
         self.blocks = nn.ModuleList(
             [ResidualBlock(hidden_dim=hidden_dim, dropout=dropout) for _ in range(n_blocks)]
         )
-        
-        # 3. 输出映射
+
         self.out_norm = nn.LayerNorm(hidden_dim)
         self.out = nn.Linear(hidden_dim, int(out_dim))
 
@@ -73,101 +70,136 @@ class DeepDecoder(nn.Module):
 
 
 # ==========================================
-# 2. 修改后的 BioSFINet 主模型 (集成动态指导)
+# 2. Mono-SFINet: 单塔频域-空域信号分解
+#    Phase I: 模态投影 + 自适应融合
+#    Phase II: 频域软低通 (基底)
+#    Phase III: 空域 GATv2 细节注入
+#    Phase IV: 残差叠加 + 解码
 # ==========================================
 
-class BioSFINet(nn.Module):
-    def __init__(self, config, atac_dim):
-        """
-        Args:
-            atac_dim: 运行时动态获取的 ATAC Peak 数
-        """
+
+class ModalityProjector(nn.Module):
+    """两层 MLP，将原模态映射到共享隐空间。"""
+
+    def __init__(self, in_dim: int, hidden_dim: int, out_dim: int, dropout: float):
         super().__init__()
-        
-        model_cfg = config['model']
-        rna_dim = model_cfg['rna_in_dim']
-        hidden_dim = model_cfg['hidden_dim']
-        sfib_dim = model_cfg.get('sfib_dim', 128)
-        
-        # 获取参数
-        rna_heads = model_cfg.get('rna_n_heads', model_cfg.get('n_heads', 4))
-        rna_dropout = model_cfg.get('rna_dropout', model_cfg.get('dropout', 0.1))
-        atac_dropout = model_cfg.get('atac_dropout', model_cfg.get('dropout', 0.1))
-        n_layers = int(model_cfg.get('n_layers', 2))
-        
-        # 1. Encoders (Phase I)
-        self.rna_enc = RNA_Encoder(in_dim=rna_dim, hidden_dim=hidden_dim, n_heads=rna_heads, dropout=rna_dropout)
-        self.atac_enc = ATAC_Encoder(in_dim=atac_dim, hidden_dim=hidden_dim, dropout=atac_dropout)
-        
-        # 2. Projections (Phase II)
-        self.rna_proj = nn.Linear(hidden_dim, sfib_dim)
-        self.atac_proj = nn.Linear(hidden_dim, sfib_dim)
-        self.ln_rna = nn.LayerNorm(sfib_dim)
-        self.ln_atac = nn.LayerNorm(sfib_dim)
-        
-        # 3. Cascade SFIB Tower
-        self.sfib_atac = nn.ModuleList([SFIB(dim=sfib_dim) for _ in range(n_layers)])
-        
-        # --- [NEW] RNA Update Stream (Guide Evolution) ---
-        # 使用 GCNConv 在图上更新 RNA 特征，模拟论文中的 feature flow
-        # 需要 n_layers - 1 个更新层
-        if n_layers > 1:
-            self.rna_updates = nn.ModuleList([
-                GCNConv(sfib_dim, sfib_dim) for _ in range(n_layers - 1)
-            ])
-        else:
-            self.rna_updates = nn.ModuleList([])
-        
-        # 4. Decoders (Phase IV) - 使用 DeepDecoder
-        self.rna_dec = DeepDecoder(
-            in_dim=sfib_dim, 
-            out_dim=rna_dim, 
-            hidden_dim=256,
-            n_blocks=1, 
-            dropout=rna_dropout
-        )
-        
-        self.atac_dec = DeepDecoder(
-            in_dim=sfib_dim, 
-            out_dim=atac_dim, 
-            hidden_dim=512,
-            n_blocks=1, 
-            dropout=atac_dropout
+        self.net = nn.Sequential(
+            nn.Linear(int(in_dim), int(hidden_dim)),
+            nn.LayerNorm(int(hidden_dim)),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(int(hidden_dim), int(out_dim)),
+            nn.LayerNorm(int(out_dim)),
         )
 
-    def forward(self, x_rna, x_atac, edge_index, u_basis):
-        # 1. Encode [N, 512]
-        h_rna = self.rna_enc(x_rna, edge_index)
-        h_atac = self.atac_enc(x_atac)
-        
-        # 2. Project [N, 128]
-        f_rna = self.ln_rna(self.rna_proj(h_rna))
-        f_atac = self.ln_atac(self.atac_proj(h_atac))
-        
-        # 3. Cascade SFIB tower (Dynamic Guide Loop)
-        curr_atac = f_atac
-        curr_rna = f_rna  # RNA 初始化为投影后的特征
-        
-        for i, block in enumerate(self.sfib_atac):
-            # A. 执行当前层的融合
-            # 使用当前的 curr_rna 指导 curr_atac
-            updated_atac = block(x_main=curr_atac, x_guide=curr_rna, edge_index=edge_index, u_basis=u_basis)
-            curr_atac = updated_atac + curr_atac # ATAC 残差更新
-            
-            # B. 准备下一层的 RNA Guide (如果是最后一层则跳过)
-            # 逻辑：利用 GCN 聚合邻域信息，使 RNA 特征随层级加深而演化
-            if i < len(self.rna_updates):
-                update_layer = self.rna_updates[i]
-                
-                # GCN 更新
-                delta_rna = update_layer(curr_rna, edge_index)
-                
-                # RNA 残差更新 + ELU 激活 (增加非线性)
-                curr_rna = F.elu(delta_rna + curr_rna)
-        
-        z_fused = curr_atac
-        
-        # 4. Decode (dual reconstruction from fused latent)
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.net(x)
+
+
+class BioSFINet(nn.Module):
+    """
+    Mono-SFINet 主干：频域提基底 + 空域补细节的单塔结构。
+    """
+
+    def __init__(self, config, atac_dim: int):
+        super().__init__()
+
+        model_cfg = config["model"]
+        rna_dim = int(model_cfg["rna_in_dim"])
+        hidden_dim = int(model_cfg.get("hidden_dim", 512))
+        fusion_dim = int(model_cfg.get("sfib_dim", hidden_dim))
+        dropout = float(model_cfg.get("dropout", 0.1))
+
+        gate_hidden = int(model_cfg.get("gate_hidden_dim", hidden_dim))
+        gat_heads = int(model_cfg.get("n_heads", 4))
+        gat_dropout = float(model_cfg.get("gat_dropout", dropout))
+        freq_decay_init = float(model_cfg.get("freq_decay_init", 0.5))
+
+        # Phase I: 模态投影 + 自适应融合
+        self.rna_proj = ModalityProjector(rna_dim, hidden_dim, fusion_dim, dropout)
+        self.atac_proj = ModalityProjector(atac_dim, hidden_dim, fusion_dim, dropout)
+        self.fusion_gate = nn.Sequential(
+            nn.Linear(fusion_dim * 2, gate_hidden),
+            nn.GELU(),
+            nn.Dropout(dropout),
+            nn.Linear(gate_hidden, fusion_dim),
+            nn.Sigmoid(),
+        )
+
+        # Phase II: 频域软低通 (全局基底)
+        self.freq_decay = nn.Parameter(torch.tensor(freq_decay_init))
+        self.freq_norm = nn.LayerNorm(fusion_dim)
+
+        # Phase III: 空域细节注入 (GATv2 动态注意力)
+        self.detail_attn = GATv2Conv(
+            in_channels=fusion_dim,
+            out_channels=fusion_dim,
+            heads=gat_heads,
+            concat=False,
+            dropout=gat_dropout,
+        )
+        self.detail_norm = nn.LayerNorm(fusion_dim)
+        self.detail_ffn = nn.Sequential(
+            nn.Linear(fusion_dim, fusion_dim),
+            nn.GELU(),
+            nn.Dropout(gat_dropout),
+            nn.LayerNorm(fusion_dim),
+        )
+
+        # Phase IV: 通道门控残差叠加
+        self.detail_gate = nn.Parameter(torch.zeros(fusion_dim))
+
+        # 解码器
+        self.rna_dec = DeepDecoder(
+            in_dim=fusion_dim,
+            out_dim=rna_dim,
+            hidden_dim=256,
+            n_blocks=1,
+            dropout=dropout,
+        )
+
+        self.atac_dec = DeepDecoder(
+            in_dim=fusion_dim,
+            out_dim=atac_dim,
+            hidden_dim=512,
+            n_blocks=1,
+            dropout=dropout,
+        )
+
+    # -------------------------
+    # Phase II: 频域基底提取
+    # -------------------------
+    def _spectral_base(self, x: torch.Tensor, u_basis: torch.Tensor, evals: torch.Tensor) -> torch.Tensor:
+        # 如果缺少特征值，退化为恒等映射，保持兼容旧数据
+        if evals is None:
+            return self.freq_norm(x)
+
+        beta = F.softplus(self.freq_decay)  # 保证衰减为正
+        h_hat = torch.matmul(u_basis.t(), x)
+        filt = torch.exp(-beta * evals).unsqueeze(1)  # [N,1]
+        h_hat_low = h_hat * filt
+        h_base = torch.matmul(u_basis, h_hat_low)
+        return self.freq_norm(h_base)
+
+    def forward(self, x_rna, x_atac, edge_index, u_basis, evals=None):
+        # Phase I: 模态投影 + 自适应融合
+        h_rna = self.rna_proj(x_rna)
+        h_atac = self.atac_proj(x_atac)
+        gate = self.fusion_gate(torch.cat([h_rna, h_atac], dim=1))
+        fused = gate * h_rna + (1.0 - gate) * h_atac
+
+        # Phase II: 全局低频基底 (频域软低通)
+        base = self._spectral_base(fused, u_basis, evals)
+
+        # Phase III: 空域高频细节 (GATv2 动态注意力)
+        detail = self.detail_attn(fused, edge_index)
+        detail = self.detail_norm(detail)
+        detail = self.detail_ffn(detail)
+
+        # Phase IV: 残差叠加 + 通道门控
+        gamma = torch.sigmoid(self.detail_gate).unsqueeze(0)  # [1, C]
+        z_fused = base + gamma * detail
+
         rec_rna = self.rna_dec(z_fused)
         rec_atac = self.atac_dec(z_fused)
 

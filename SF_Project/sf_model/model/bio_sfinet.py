@@ -153,7 +153,7 @@ class BioSFINet(nn.Module):
         self.rna_dec = DeepDecoder(
             in_dim=fusion_dim,
             out_dim=rna_dim,
-            hidden_dim=256,
+            hidden_dim=512,
             n_blocks=1,
             dropout=dropout,
         )

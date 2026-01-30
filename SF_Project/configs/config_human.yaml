@@ -69,7 +69,7 @@ train:
   batch_size: 1                      # 批大小（当前实现按全量）
   learning_rate: 1e-3                # 学习率
   weight_decay: 1e-4                 # 权重衰减
-  lambda_rna: 1.0                    # RNA 重构损失权重
+  lambda_rna: 5.0                    # RNA 重构损失权重
   lambda_atac: 1.0                   # ATAC 重构损失权重
   pos_weight_rna: 10.0               # Weighted MSE 正类权重 (RNA)
   pos_weight_atac: 20.0              # Weighted MSE 正类权重 (ATAC)

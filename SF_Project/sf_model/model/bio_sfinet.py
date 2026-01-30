@@ -102,8 +102,7 @@ class BioSFINet(nn.Module):
         atac_dropout = model_cfg.get('atac_dropout', model_cfg.get('dropout', 0.1))
         proj_hidden = model_cfg.get('proj_hidden_dim', 64)
         proj_output = model_cfg.get('proj_output_dim', 64)
-        sfib_gat_heads = model_cfg.get('sfib_gat_heads', 1)
-        sfib_dropout = model_cfg.get('sfib_dropout', model_cfg.get('dropout', 0.1))
+        num_ino_layers = model_cfg.get('sfib_ino_layers', 3)
 
         # 1) Encoders
         self.rna_enc = RNA_Encoder(in_dim=rna_dim, hidden_dim=hidden_dim, n_heads=rna_heads, dropout=rna_dropout)
@@ -114,7 +113,7 @@ class BioSFINet(nn.Module):
         self.atac_proj = StreamProjector(in_dim=hidden_dim, out_dim=sfib_dim, dropout=atac_dropout)
 
         # 3) Symmetric SFIB (frequency + spatial competition)
-        self.sfib = SymmetricSFIB(dim=sfib_dim, gat_dropout=sfib_dropout, gat_heads=sfib_gat_heads)
+        self.sfib = SymmetricSFIB(dim=sfib_dim, num_ino_layers=num_ino_layers)
 
         # 4) Decoders reuse deep residual heads
         rna_dec_hidden = model_cfg.get('rna_dec_hidden', 512)

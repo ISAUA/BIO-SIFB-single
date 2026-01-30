@@ -14,7 +14,7 @@ eval:                               # 评估相关设置
   checkpoint: "best"               # 默认使用哪个检查点（key 名，可在 checkpoints 映射中定义）
   checkpoints:                      # key->文件名映射，可自由扩展
     best: "ckpt_best.pth"
-    final: "ckpt_600.pth"
+    final: "ckpt_300.pth"
 
 # ------------------------------------------
 # 1. 数据路径与预处理参数
@@ -51,28 +51,41 @@ data:
 # 2. 模型架构参数
 # ------------------------------------------
 model:
-  name: "Mono-SFINet"               # 单塔频域-空域分解模型
+  name: "SFNet"                     # 模型名称
   rna_in_dim: 3000                   # RNA 输入维度（高变基因数）
-  hidden_dim: 512                    # 模态投影隐藏维度
-  sfib_dim: 128                      # 融合隐空间维度 (= 单塔宽度)
-  gate_hidden_dim: 256               # 模态自适应门控的隐藏宽度
-  n_heads: 4                         # GATv2 头数 (细节注入)
-  dropout: 0.1                       # 通用 dropout（投影/解码）
-  gat_dropout: 0.1                   # 空域细节分支的 dropout
-  freq_decay_init: 0.8               # 频域软低通的初始衰减系数
+  hidden_dim: 512                    # 编码器隐藏维度
+  rna_n_heads: 4                     # RNA GAT 头数
+  rna_dropout: 0.1                   # RNA 编码器 dropout
+  atac_dropout: 0.1                  # ATAC 编码器 dropout
+  n_heads: 4                         # 备用头数（保持一致）
+  dropout: 0.1                       # 通用 dropout
+  grid_size: 128                     # 网格大小（如有使用）
+  latent_dim: 50                     # 潜变量维度（如有使用）
+  sfib_dim: 128                      # SFIB 特征维度
+  sfib_ino_layers: 3                 # SFIB 中 INO 单元层数
+  proj_hidden_dim: 64                # 对比投影头隐藏维度
+  proj_output_dim: 64                # 对比投影头输出维度
+  rna_dec_hidden: 512                # RNA 解码器隐藏维度
+  rna_dec_blocks: 1                  # RNA 解码器残差块数
+  atac_dec_hidden: 512               # ATAC 解码器隐藏维度
+  atac_dec_blocks: 1                 # ATAC 解码器残差块数
 
 # ------------------------------------------
 # 3. 训练策略参数
 # ------------------------------------------
 train:
-  epochs: 1000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                      # 批大小（当前实现按全量）
-  learning_rate: 1e-3                # 学习率
+  learning_rate: 1e-3                # 学习率（前 500 轮）
+  learning_rate_low: 1e-3            # 学习率（后 500 轮）
+  lr_switch_epoch: 800               # 学习率切换轮次
   weight_decay: 1e-4                 # 权重衰减
   lambda_rna: 5.0                    # RNA 重构损失权重
   lambda_atac: 1.0                   # ATAC 重构损失权重
-  pos_weight_rna: 10.0               # Weighted MSE 正类权重 (RNA)
-  pos_weight_atac: 20.0              # Weighted MSE 正类权重 (ATAC)
+  lambda_clip: 0.5                   # 对比损失权重
+  pos_weight_rna: 10.0               # RNA 重构正样本权重
+  pos_weight_atac: 20.0              # ATAC 重构正样本权重
+  clip_temperature: 0.5              # 对比损失温度
   save_every: 50                     # 周期性保存间隔
   device: "cuda"                    # 设备
   log_interval: 10                   # 日志打印间隔（轮）

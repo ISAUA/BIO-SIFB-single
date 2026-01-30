@@ -124,7 +124,7 @@ def main():
     coords = adata_rna.obsm['spatial']
     
     # 计算图基底 (GFT Basis)
-    edge_index, u_basis, evals = build_spatial_graph(coords, k=params['knn_k'])
+    edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
 
     # 转换为 Tensor
     def to_tensor(adata):
@@ -148,7 +148,6 @@ def main():
         "coords": coords_tensor,
         "edge_index": edge_index,
         "u_basis": u_basis,
-        "evals": evals,
         "atac_dim": atac_feat.shape[1] # 记录动态 ATAC 维度
     }
     

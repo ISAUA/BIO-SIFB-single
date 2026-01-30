@@ -1,128 +1,70 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
-from torch_geometric.nn import GCNConv
+from torch_geometric.nn import GATv2Conv
 
-class SFIB(nn.Module):
+
+class SymmetricSFIB(nn.Module):
     """
-    Spatial-Frequency Integration Block (Graph-Spectral Version)
-    严格遵循最终框架设计: Phase III
+    Symmetric Selective Fusion block.
+    Implements frequency-domain and spatial-domain competition where RNA/ATAC are treated equally.
     """
-    def __init__(self, dim=128):
+
+    def __init__(self, dim: int = 128, gat_dropout: float = 0.1, gat_heads: int = 1):
         super().__init__()
-        self.dim = dim
-        
-        # ==========================
-        # 1. 频率域分支 (Frequency Branch - GFT)
-        # ==========================
-        # 接收 [N, 2C] 的频谱拼接，输出 [N, C] 的频率掩码权重
-        # W_freq_mask 是可学习的参数，这里通过 MLP 动态生成
+        self.dim = int(dim)
+
+        # Frequency gate: decides per-frequency confidence between RNA and ATAC
         self.freq_gate = nn.Sequential(
-            nn.Linear(dim * 2, dim),
-            nn.ReLU(),
-            nn.Linear(dim, dim),
-            nn.Sigmoid() # Mask 0~1
+            nn.Linear(self.dim * 2, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+            nn.Sigmoid(),
         )
-        
-        # ==========================
-        # 2. 空间域分支 (Spatial Branch - Graph INO)
-        # ==========================
-        # 使用 GCNConv 作为 GNN_Aggregator 提取局部微环境 (S, T)
-        # Guide -> Main
-        self.gcn_s = GCNConv(dim, dim)
-        self.gcn_t = GCNConv(dim, dim)
-        
-        # ==========================
-        # 3. 双域融合 (Dual Fusion)
-        # ==========================
-        # Node Attention: 根据 diff 决定权重
-        self.node_attn = nn.Sequential(
-            nn.Linear(dim, 1),
-            nn.Sigmoid()
+
+        # Spatial extractors (independent attention for each modality)
+        self.gat_rna = GATv2Conv(self.dim, self.dim, heads=gat_heads, concat=False, dropout=gat_dropout)
+        self.gat_atac = GATv2Conv(self.dim, self.dim, heads=gat_heads, concat=False, dropout=gat_dropout)
+
+        # Spatial gate: decides per-node/feature winner after GAT aggregation
+        self.spa_gate = nn.Sequential(
+            nn.Linear(self.dim * 2, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+            nn.Sigmoid(),
         )
-        
-        # Channel Attention: 简单实现
-        self.channel_fc = nn.Sequential(
-            nn.Linear(dim * 2, dim // 2),
-            nn.ReLU(),
-            nn.Linear(dim // 2, dim * 2),
-            nn.Sigmoid()
-        )
-        
-        self.out_proj = nn.Linear(dim * 2, dim)
 
-    def forward_freq(self, x_main, x_guide, u_basis):
-        """
-        频域处理: GFT -> Mask -> iGFT
-        Args:
-            u_basis: [N, N] 预计算的 GFT 基底
-        """
-        # 1. GFT (Graph Fourier Transform)
-        # H_hat = U^T * H
-        h_hat_main = torch.matmul(u_basis.t(), x_main)
-        h_hat_guide = torch.matmul(u_basis.t(), x_guide)
-        
-        # 2. Spectral Masking
-        # 拼接频谱
-        cat_freq = torch.cat([h_hat_main, h_hat_guide], dim=1) # [N, 2C]
-        
-        # 生成掩码 Delta
-        mask = self.freq_gate(cat_freq) # [N, C]
-        
-        # 残差修正: Main + Delta (这里简化为乘法门控或加法修正，按论文逻辑为加法)
-        # 这里的 mask 实际上充当了 filter 的角色
-        # 假设设计是: Main的频谱分布被 Guide 修正
-        h_hat_fused = h_hat_main + mask * h_hat_guide 
-        
-        # 3. iGFT (Inverse GFT)
-        # H = U * H_hat
-        h_freq = torch.matmul(u_basis, h_hat_fused)
-        
-        return h_freq
+        # Detail amplification factor
+        self.gamma = nn.Parameter(torch.tensor(1.0))
 
-    def forward_spatial(self, x_main, x_guide, edge_index):
-        """
-        空域处理: GNN Agg -> INN Coupling
-        """
-        # 1. Guide -> Main
-        # 获取 Guide 的局部环境特征 (S, T)
-        s = self.gcn_s(x_guide, edge_index)
-        t = self.gcn_t(x_guide, edge_index)
-        
-        # 2. Affine Coupling
-        # H_main' = H_main * exp(S) + T
-        # 限制 S 的范围以防数值不稳定
-        s = torch.tanh(s)
-        h_spatial = x_main * torch.exp(s) + t
-        
-        return h_spatial
+        # Output normalization for stability
+        self.out_norm = nn.LayerNorm(self.dim)
 
-    def forward(self, x_main, x_guide, edge_index, u_basis):
-        """
-        x_main:  [N, C]
-        x_guide: [N, C]
-        """
-        # --- Branch 1: Frequency ---
-        h_freq = self.forward_freq(x_main, x_guide, u_basis)
-        
-        # --- Branch 2: Spatial ---
-        h_spatial = self.forward_spatial(x_main, x_guide, edge_index)
-        
-        # --- Branch 3: Dual Interaction ---
-        # 1. Node Attn (找茬)
-        diff = h_spatial - h_freq
-        w_node = self.node_attn(diff)
-        
-        # 2. 补全
-        h_enhanced = h_spatial + h_freq * w_node
-        
-        # 3. Concat & Channel Selection
-        h_cat = torch.cat([h_enhanced, h_freq], dim=1) # [N, 2C]
-        
-        # Global Avg/Std for Channel Attn (简化版)
-        # w_channel = self.channel_fc(h_cat.mean(0, keepdim=True)) ... 省略复杂实现
-        
-        # 4. Final Output (Res connection handled in block usually, or here)
-        out = self.out_proj(h_cat)
+    def frequency_branch(self, h_rna: torch.Tensor, h_atac: torch.Tensor, u_basis: torch.Tensor):
+        """Frequency competition with dual GFT and confidence gating."""
+        hat_rna = torch.matmul(u_basis.t(), h_rna)
+        hat_atac = torch.matmul(u_basis.t(), h_atac)
 
-        return out
+        m_freq = self.freq_gate(torch.cat([hat_rna, hat_atac], dim=1))
+        hat_fused = m_freq * hat_rna + (1.0 - m_freq) * hat_atac
+        z_base = torch.matmul(u_basis, hat_fused)
+        return z_base, m_freq
+
+    def spatial_branch(self, h_rna: torch.Tensor, h_atac: torch.Tensor, edge_index: torch.Tensor):
+        """Spatial competition via dual GATv2 encoders and gating."""
+        n_rna = self.gat_rna(h_rna, edge_index)
+        n_atac = self.gat_atac(h_atac, edge_index)
+
+        gamma_spa = self.spa_gate(torch.cat([n_rna, n_atac], dim=1))
+        z_detail = gamma_spa * n_rna + (1.0 - gamma_spa) * n_atac
+        return z_detail, gamma_spa
+
+    def forward(self, h_rna: torch.Tensor, h_atac: torch.Tensor, edge_index: torch.Tensor, u_basis: torch.Tensor):
+        # Frequency-domain symmetric selection
+        z_base, m_freq = self.frequency_branch(h_rna, h_atac, u_basis)
+
+        # Spatial-domain symmetric selection
+        z_detail, gamma_spa = self.spatial_branch(h_rna, h_atac, edge_index)
+
+        # Final single-tower representation
+        z_fused = self.out_norm(z_base + self.gamma * z_detail)
+        return z_fused, z_base, z_detail, m_freq, gamma_spa

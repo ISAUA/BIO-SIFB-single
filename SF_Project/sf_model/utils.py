@@ -116,3 +116,67 @@ class CLIPLoss(nn.Module):
         loss_t = F.cross_entropy(logits.T, labels)
         
         return (loss_i + loss_t) / 2
+
+
+class SpatialContrastiveLoss(nn.Module):
+    """
+    多正样本空间图对比损失 (Multi-Positive InfoNCE)。
+
+    对于每个节点 i，以 edge_index 中定义的空间邻居作为正样本，
+    Batch 内其余节点（排除自身）作为负样本，计算 InfoNCE 损失。
+
+    数学公式:
+        L_SCL^(i) = -1/|N(i)| * sum_{j in N(i)} log [
+            exp(h_i · h_j / tau) /
+            sum_{k != i} exp(h_i · h_k / tau)
+        ]
+    """
+
+    def __init__(self, tau: float = 0.1):
+        super().__init__()
+        self.tau = tau
+
+    def forward(self, h: torch.Tensor, edge_index: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            h: L2 归一化特征，shape [N, proj_dim]
+            edge_index: 空间图边索引，shape [2, E]
+        Returns:
+            标量损失值
+        """
+        N = h.size(0)
+        device = h.device
+
+        # 步骤 1: 稠密相似度矩阵 [N, N]
+        sim_matrix = torch.matmul(h, h.T) / self.tau
+
+        # 步骤 2: 屏蔽对角线，计算分母的 log-sum-exp（所有非自身节点）
+        diag_mask = torch.eye(N, dtype=torch.bool, device=device)
+        sim_matrix_no_diag = sim_matrix.masked_fill(diag_mask, float('-inf'))
+        # log-sum-exp over all k != i: shape [N]
+        log_denom = torch.logsumexp(sim_matrix_no_diag, dim=1)
+
+        # 步骤 3: 过滤掉自环，得到有效正样本对
+        src, dst = edge_index[0], edge_index[1]
+        valid_mask = src != dst          # 去掉自环（若有）
+        valid_src = src[valid_mask]
+        valid_dst = dst[valid_mask]
+
+        if valid_src.numel() == 0:
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        # 步骤 4: 逐节点对正样本取平均，再对全 batch 求均值
+        # log_prob(i,j) = sim_matrix[i,j] - log_denom[i]
+        log_probs = sim_matrix[valid_src, valid_dst] - log_denom[valid_src]
+        loss_per_node = torch.zeros(N, device=device)
+        count_per_node = torch.zeros(N, device=device)
+        loss_per_node.scatter_add_(0, valid_src, -log_probs)
+        count_per_node.scatter_add_(0, valid_src, torch.ones_like(log_probs))
+
+        # 只对有正样本的节点求均值
+        has_pos = count_per_node > 0
+        if not has_pos.any():
+            return torch.tensor(0.0, device=device, requires_grad=True)
+
+        node_losses = loss_per_node[has_pos] / count_per_node[has_pos]
+        return node_losses.mean()

@@ -166,6 +166,15 @@ class BioSFINet(nn.Module):
             dropout=dropout,
         )
 
+        # 对比投影头: 将融合特征映射到对比空间 (不干扰重构)
+        proj_dim = int(model_cfg.get("proj_dim", 128))
+        self.contrastive_proj = nn.Sequential(
+            nn.Linear(fusion_dim, hidden_dim),
+            nn.LayerNorm(hidden_dim),
+            nn.GELU(),
+            nn.Linear(hidden_dim, proj_dim),
+        )
+
     # -------------------------
     # Phase II: 频域基底提取
     # -------------------------
@@ -203,4 +212,8 @@ class BioSFINet(nn.Module):
         rec_rna = self.rna_dec(z_fused)
         rec_atac = self.atac_dec(z_fused)
 
-        return z_fused, rec_rna, rec_atac
+        # 对比投影头：映射到对比空间并 L2 归一化
+        h = self.contrastive_proj(z_fused)
+        h = F.normalize(h, dim=1)
+
+        return z_fused, rec_rna, rec_atac, h

@@ -3,6 +3,7 @@ import torch.optim as optim
 import torch.nn.functional as F
 import os
 import logging
+from sf_model.utils import SpatialContrastiveLoss
 
 class SFTrainer:
     def __init__(self, model, config, device='cuda'):
@@ -23,6 +24,11 @@ class SFTrainer:
         self.best_name = config['train'].get('best_name', 'ckpt_best.pth')
         self.best_path = os.path.join(self.save_dir, self.best_name)
 
+        # 对比损失相关配置
+        tau = float(config['train'].get('tau', 0.1))
+        self.lambda_scl = float(config['train'].get('lambda_scl', 0.1))
+        self.scl_loss_fn = SpatialContrastiveLoss(tau=tau)
+
     def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, evals):
         self.model.train()
         self.optimizer.zero_grad()
@@ -35,7 +41,7 @@ class SFTrainer:
         evals = evals.to(self.device) if evals is not None else None
         
         # Forward
-        z_fused, rec_rna, rec_atac = self.model(rna_feat, atac_feat, edge_index, u_basis, evals)
+        z_fused, rec_rna, rec_atac, h = self.model(rna_feat, atac_feat, edge_index, u_basis, evals)
         
         # Loss Calculation (Weighted MSE: positive entries get amplified weight)
         def weighted_mse(pred: torch.Tensor, target: torch.Tensor, pos_w: float) -> torch.Tensor:
@@ -47,12 +53,15 @@ class SFTrainer:
 
         loss_rec_rna = weighted_mse(rec_rna, rna_feat, pos_w_rna)
         loss_rec_atac = weighted_mse(rec_atac, atac_feat, pos_w_atac)
+
+        # Spatial Contrastive Loss
+        loss_scl = self.scl_loss_fn(h, edge_index)
         
         # Total Loss
         lambda_r = self.config['train'].get('lambda_rna', 1.0)
         lambda_a = self.config['train'].get('lambda_atac', 1.0)
         
-        total_loss = lambda_r * loss_rec_rna + lambda_a * loss_rec_atac
+        total_loss = lambda_r * loss_rec_rna + lambda_a * loss_rec_atac + self.lambda_scl * loss_scl
         
         total_loss.backward()
         self.optimizer.step()
@@ -60,7 +69,8 @@ class SFTrainer:
         return {
             "total": total_loss.item(),
             "rec_rna": loss_rec_rna.item(),
-            "rec_atac": loss_rec_atac.item()
+            "rec_atac": loss_rec_atac.item(),
+            "scl_loss": loss_scl.item(),
         }
 
     def run(self, rna_data, atac_data, edge_index, u_basis, evals=None):
@@ -79,6 +89,7 @@ class SFTrainer:
                 print(
                     f"Epoch {epoch:03d} | total {metrics['total']:.4f} | "
                     f"rec_rna {metrics['rec_rna']:.4f} | rec_atac {metrics['rec_atac']:.4f} | "
+                    f"scl_loss {metrics['scl_loss']:.4f} | "
                     f"best {best_display}"
                 )
 

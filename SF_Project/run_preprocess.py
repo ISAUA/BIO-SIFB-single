@@ -117,21 +117,44 @@ def main():
         tfidf_eps=tfidf_eps,
     )
 
+    # # ==========================================
+    # # Step 4: 构建空间图 & 准备 Tensor
+    # # ==========================================
+    # print("\n🕸️ Building Spatial Graph & GFT Basis...")
+    # coords = adata_rna.obsm['spatial']
+    
+    # # 计算图基底 (GFT Basis)
+    # edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
+
+    # # 转换为 Tensor
+    # def to_tensor(adata):
+    #     if hasattr(adata.X, 'toarray'):
+    #         return torch.FloatTensor(adata.X.toarray())
+    #     return torch.FloatTensor(adata.X)
+
+    # rna_feat = to_tensor(adata_rna)
+    # atac_feat = to_tensor(adata_atac)
+    # coords_tensor = torch.FloatTensor(coords)
+
     # ==========================================
-    # Step 4: 构建空间图 & 准备 Tensor
+    # Step 4: 构建空间图 & 准备 Tensor  #根据knn引入权重
     # ==========================================
-    print("\n🕸️ Building Spatial Graph & GFT Basis...")
+    print("\n🕸️ Building Spatial Graph & GFT Basis with Feature Weights...")
     coords = adata_rna.obsm['spatial']
     
-    # 计算图基底 (GFT Basis)
-    edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
+    # 提取经过 Log1p 处理后的 RNA 特征，作为计算空间边界的依据
+    rna_features = adata_rna.X
+    
+    # 计算图基底，传入 rna_features 启用高斯核权重机制
+    edge_index, u_basis = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
 
-    # 转换为 Tensor
+    # 转换为 Tensor (保持原有逻辑)
     def to_tensor(adata):
         if hasattr(adata.X, 'toarray'):
             return torch.FloatTensor(adata.X.toarray())
         return torch.FloatTensor(adata.X)
 
+    # 【核心修复】：这三行是将数据真正转为模型输入的关键，必须保留
     rna_feat = to_tensor(adata_rna)
     atac_feat = to_tensor(adata_atac)
     coords_tensor = torch.FloatTensor(coords)

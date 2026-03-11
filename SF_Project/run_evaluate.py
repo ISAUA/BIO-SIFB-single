@@ -31,9 +31,9 @@ def infer_epoch_label(ckpt_name):
     base = os.path.splitext(os.path.basename(ckpt_name))[0]
     match = re.search(r"ckpt[_-]?(\d+)", base)
     if match:
-        return f"第 {match.group(1)} 个 epoch"
+        return f"Epoch {match.group(1)} "
     if "best" in base.lower():
-        return "最佳 (best)"
+        return "BEST (best)"
     return base
 
 def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None):

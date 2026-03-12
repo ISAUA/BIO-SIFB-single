@@ -63,41 +63,60 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     
     print(f"   -> Clustering (Leiden)...")
     try:
-        sc.tl.leiden(adata, resolution=resolution, key_added='cluster')
+        sc.tl.leiden(
+            adata,
+            resolution=resolution,
+            key_added='cluster',
+            flavor='igraph',
+            n_iterations=2,
+            directed=False,
+        )
     except Exception as e:
         print("   ⚠️ Leiden clustering failed (maybe install leidenalg?), falling back to louvain.")
         sc.tl.louvain(adata, resolution=resolution, key_added='cluster')
     
     # 3. 绘图 (UMAP + Spatial)
     # 设置绘图风格
-    sc.set_figure_params(dpi=150, figsize=(6, 6))
+    # 统一高对比色与画布参数
+    vivid_palette = plt.get_cmap("tab10").colors  # 高对比离散色
+    sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
     
     print("   -> Plotting...")
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
     
     # 左图: UMAP
     sc.pl.umap(
-        adata, 
-        color='cluster', 
-        ax=axs[0], 
-        show=False, 
+        adata,
+        color='cluster',
+        ax=axs[0],
+        show=False,
         title='Bio-SFINet Joint Embedding (UMAP)',
         legend_loc='on data',
-        frameon=False,
-        size=20
+        frameon=True,
+        size=60,  # 加大点径，减少缝隙
+        palette=vivid_palette,
+        alpha=1.0,
+        edges=False,
     )
     
     # 右图: Spatial (物理空间)
     sc.pl.embedding(
-        adata, 
-        basis='spatial', 
-        color='cluster', 
-        ax=axs[1], 
-        show=False, 
+        adata,
+        basis='spatial',
+        color='cluster',
+        ax=axs[1],
+        show=False,
         title='Spatial Map',
-        size=40, # 点的大小，可根据细胞密度调整
-        frameon=False
+        size=80,  # 更大点径，形成致密块
+        frameon=True,
+        palette=vivid_palette,
+        alpha=1.0,
+        edges=False,
     )
+
+    # 极简坐标轴：保留框体，隐藏刻度线与刻度标签
+    for ax in axs:
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
     # 翻转 Y 轴以匹配常见的显微镜视角 (可选)
     # axs[1].invert_yaxis() 
     

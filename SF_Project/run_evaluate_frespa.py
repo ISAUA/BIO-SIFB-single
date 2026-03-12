@@ -45,11 +45,19 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
     sc.pp.neighbors(adata, use_rep="X")
     sc.tl.umap(adata)
     try:
-        sc.tl.leiden(adata, resolution=resolution, key_added="cluster")
+        sc.tl.leiden(
+            adata,
+            resolution=resolution,
+            key_added="cluster",
+            flavor="igraph",
+            n_iterations=2,
+            directed=False,
+        )
     except Exception:
         sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
 
-    sc.set_figure_params(dpi=150, figsize=(6, 6))
+    vivid_palette = plt.get_cmap("tab10").colors  # 高对比离散色
+    sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
 
     sc.pl.umap(
@@ -59,8 +67,11 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
         show=False,
         title=f"{label} UMAP",
         legend_loc="on data",
-        frameon=False,
-        size=20,
+        frameon=True,
+        size=60,
+        palette=vivid_palette,
+        alpha=1.0,
+        edges=False,
     )
 
     sc.pl.embedding(
@@ -70,9 +81,15 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
         ax=axs[1],
         show=False,
         title=f"{label} Spatial",
-        size=40,
-        frameon=False,
+        size=80,
+        frameon=True,
+        palette=vivid_palette,
+        alpha=1.0,
+        edges=False,
     )
+
+    for ax in axs:
+        ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
     fig.text(0.5, 0.99, f"{label} | {epoch_label}", ha="center", va="top", fontsize=12)
 

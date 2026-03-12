@@ -45,7 +45,7 @@ data:
     atac_target_sum: 1e4             # ATAC 归一化目标总和
     tfidf_eps: 1e-6                  # TF-IDF 平滑项
     tss_window: 150000               # TSS 上下游窗口(bp)
-    knn_k: 50                        # 空间图 k 近邻
+    knn_k: 6                        # 空间图 k 近邻
 
 # ------------------------------------------
 # 2. 模型架构参数
@@ -85,7 +85,7 @@ train:
   lambda_clip: 0.5                  # 对比损失权重
   pos_weight_rna: 10.0              # RNA 重构正样本权重
   pos_weight_atac: 20.0             # ATAC 重构正样本权重
-  clip_temperature: 0.1             # 对比温度
+  clip_temperature: 0.5             # 对比温度
   save_every: 50                    # 权重保存间隔
   device: "cuda"                   # 训练设备
   log_interval: 10                  # 日志打印间隔

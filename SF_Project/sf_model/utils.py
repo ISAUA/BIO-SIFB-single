@@ -67,10 +67,11 @@ from sklearn.neighbors import NearestNeighbors
 #     return edge_index, u_basis
 
 
-# 2026-03-11: 引入 RNA 特征权重机制的空间图构建函数
 def build_spatial_graph(coords, features=None, k=6):
     """
-    构建空间 KNN 图并计算 GFT 基底。引入 RNA 特征相似度作为边权重以保护生物学边界。
+    构建空间 KNN 图并计算 GFT 基底。
+    - 默认：RNA 特征欧氏距离 + 高斯核衰减 (features 不为 None 时)
+    - 备选：空间欧氏距离 + 高斯核衰减 (已注释，可手动切换)
     """
     N = coords.shape[0]
     
@@ -82,30 +83,55 @@ def build_spatial_graph(coords, features=None, k=6):
     src = np.repeat(np.arange(N), k)
     dst = indices[:, 1:].flatten()
     
-    # 2. 计算边权重 (基于特征相似度)
+    # 2. 计算边权重 (默认：特征欧氏距离高斯衰减)
     if features is not None:
-        # 获取源节点和目标节点的特征向量
         f_src = features[src]
         f_dst = features[dst]
-        
-        # 处理稀疏矩阵格式
+
         if sp.issparse(features):
             f_src = f_src.toarray()
             f_dst = f_dst.toarray()
-            
-        # 计算特征空间中的欧式距离平方
+
         dist_sq = np.sum((f_src - f_dst) ** 2, axis=1)
-        
-        # 自适应估计高斯核带宽 sigma^2 (中位数启发式)
         sigma2 = np.median(dist_sq)
         if sigma2 == 0:
-            sigma2 = 1e-4 # 防止除零
-            
-        # 计算高斯核权重，加入 1e-4 的微小正则项保证图的连通性
+            sigma2 = 1e-4  # 防止除零
         weights = np.exp(-dist_sq / (2 * sigma2)) + 1e-4
     else:
-        # 如果未提供特征，则退化为无权图
+        # # 备选方案：空间距离衰减（默认注释，可按需启用）
+        # dist_sq = (distances[:, 1:] ** 2).flatten()
+        # sigma2 = np.median(dist_sq)
+        # if sigma2 == 0:
+        #     sigma2 = 1e-4  # 防止除零
+        # weights = np.exp(-dist_sq / (2 * sigma2)) + 1e-4
+
+        # 当前退化为无权图；若需空间衰减，请取消上方注释
         weights = np.ones(len(src))
+
+    #   如果同时使用特征和空间距离，可以在此处合成权重，例如：
+    #     # 2. 计算边权重：特征核 × 空间核
+    # spatial_dist_sq = (distances[:, 1:] ** 2).flatten()
+    # sigma2_spa = np.median(spatial_dist_sq)
+    # if sigma2_spa == 0:
+    #     sigma2_spa = 1e-4
+    # w_spa = np.exp(-spatial_dist_sq / (2 * sigma2_spa))
+
+    # if features is not None:
+    #     f_src = features[src]
+    #     f_dst = features[dst]
+    #     if sp.issparse(features):
+    #         f_src = f_src.toarray()
+    #         f_dst = f_dst.toarray()
+    #     feat_dist_sq = np.sum((f_src - f_dst) ** 2, axis=1)
+    #     sigma2_feat = np.median(feat_dist_sq)
+    #     if sigma2_feat == 0:
+    #         sigma2_feat = 1e-4
+    #     w_feat = np.exp(-feat_dist_sq / (2 * sigma2_feat))
+    # else:
+    #     w_feat = np.ones(len(src))
+
+    # # 合成权重并加微小正则保持连通
+    # weights = w_spa * w_feat + 1e-4
     
     # 3. 构建稀疏邻接矩阵
     adj = sp.coo_matrix((weights, (src, dst)), shape=(N, N))

@@ -141,12 +141,11 @@ def main():
     # ==========================================
     print("\n🕸️ Building Spatial Graph & GFT Basis with Feature Weights...")
     coords = adata_rna.obsm['spatial']
-    
-    # 提取经过 Log1p 处理后的 RNA 特征，作为计算空间边界的依据
+    # 默认：RNA 特征欧氏距离权重；若需空间距离衰减，注释下行并启用备选行
     rna_features = adata_rna.X
-    
-    # 计算图基底，传入 rna_features 启用高斯核权重机制
     edge_index, u_basis = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
+    # 备选：使用空间距离高斯衰减
+    # edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
 
     # 转换为 Tensor (保持原有逻辑)
     def to_tensor(adata):

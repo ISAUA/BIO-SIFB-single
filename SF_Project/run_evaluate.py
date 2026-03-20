@@ -6,8 +6,6 @@ import yaml
 import numpy as np
 import scanpy as sc
 import matplotlib.pyplot as plt
-from esda.moran import Moran
-from libpysal.weights import KNN
 from sf_model.utils import set_seed
 
 # 引入模型
@@ -37,34 +35,6 @@ def infer_epoch_label(ckpt_name):
     if "best" in base.lower():
         return "BEST (best)"
     return base
-
-
-def compute_cluster_morans_i(adata, cluster_key='cluster', k=10):
-    """
-    计算聚类标签在空间坐标上的 Moran's I。
-    """
-    if 'spatial' not in adata.obsm:
-        raise ValueError("Missing spatial coordinates in adata.obsm['spatial']")
-    if cluster_key not in adata.obs:
-        raise ValueError(f"Missing cluster labels in adata.obs['{cluster_key}']")
-
-    coords = np.asarray(adata.obsm['spatial'], dtype=np.float64)
-    cluster_codes = adata.obs[cluster_key].astype('category').cat.codes.to_numpy(dtype=np.float64)
-
-    # 使用空间 KNN 权重计算全局 Moran's I
-    w = KNN.from_array(coords, k=int(k))
-    w.transform = 'R'
-    mi = Moran(cluster_codes, w)
-
-    adata.uns['moran_i'] = {
-        'I': float(mi.I),
-        'p_norm': float(mi.p_norm),
-        'z_norm': float(mi.z_norm),
-        'k': int(k),
-        'cluster_key': cluster_key,
-    }
-
-    print(f"   -> Moran's I (cluster spatial autocorrelation): I={mi.I:.4f}, z={mi.z_norm:.4f}, p={mi.p_norm:.4e}")
 
 def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None):
     """
@@ -104,9 +74,6 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     except Exception as e:
         print("   ⚠️ Leiden clustering failed (maybe install leidenalg?), falling back to louvain.")
         sc.tl.louvain(adata, resolution=resolution, key_added='cluster')
-
-    # 聚类空间自相关评估
-    compute_cluster_morans_i(adata, cluster_key='cluster', k=10)
     
     # 3. 绘图 (UMAP + Spatial)
     # 设置绘图风格
@@ -158,7 +125,7 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         fig.text(
             0.5,
             0.99,
-            f"Plotted with {epoch_label} weights",
+            f"使用 {epoch_label} 的权重进行绘图",
             ha="center",
             va="top",
             fontsize=12

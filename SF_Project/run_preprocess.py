@@ -6,7 +6,12 @@ import numpy as np
 import scanpy as sc
 
 # 引入预处理模块
-from sf_model.preprocess.io import read_mtx_to_adata, add_spatial_info
+from sf_model.preprocess.io import (
+    read_mtx_to_adata,
+    add_spatial_info,
+    read_10x_h5_multiome,
+    add_spatial_info_csv,
+)
 from sf_model.preprocess.rna_process import process_rna_pipeline
 from sf_model.preprocess.atac_process import process_atac_pipeline
 from sf_model.utils import build_spatial_graph, set_seed
@@ -44,24 +49,38 @@ def main():
     # Step 1: 加载原始数据
     # ==========================================
     print("\n📦 Loading Raw Data...")
-    
-    # A. 加载 RNA
-    print(f"   -> Reading RNA from {files['rna_mtx']}...")
-    adata_rna = read_mtx_to_adata(
-        os.path.join(raw_dir, files['rna_mtx']),
-        os.path.join(raw_dir, files['rna_genes']),
-        os.path.join(raw_dir, files['rna_barcodes'])
-    )
-    # 添加空间坐标
-    adata_rna = add_spatial_info(adata_rna, os.path.join(raw_dir, files['spatial']))
-    
-    # B. 加载 ATAC
-    print(f"   -> Reading ATAC from {files['atac_mtx']}...")
-    adata_atac = read_mtx_to_adata(
-        os.path.join(raw_dir, files['atac_mtx']),
-        os.path.join(raw_dir, files['atac_peaks']),
-        os.path.join(raw_dir, files['atac_barcodes'])
-    )
+
+    # 自动根据配置键选择预处理读取路径：
+    # 1) MISAR: h5_matrix + spatial_csv
+    # 2) 旧版: rna_mtx/rna_genes/rna_barcodes + atac_mtx/atac_peaks/atac_barcodes + spatial
+    if 'h5_matrix' in files and 'spatial_csv' in files:
+        print(f"   -> Reading RNA+ATAC from {files['h5_matrix']}...")
+        adata_rna, adata_atac = read_10x_h5_multiome(
+            os.path.join(raw_dir, files['h5_matrix'])
+        )
+        adata_rna = add_spatial_info_csv(
+            adata_rna,
+            os.path.join(raw_dir, files['spatial_csv'])
+        )
+    else:
+        print(f"   -> Reading RNA from {files['rna_mtx']}...")
+        adata_rna = read_mtx_to_adata(
+            os.path.join(raw_dir, files['rna_mtx']),
+            os.path.join(raw_dir, files['rna_genes']),
+            os.path.join(raw_dir, files['rna_barcodes'])
+        )
+        adata_rna = add_spatial_info(adata_rna, os.path.join(raw_dir, files['spatial']))
+
+        print(f"   -> Reading ATAC from {files['atac_mtx']}...")
+        adata_atac = read_mtx_to_adata(
+            os.path.join(raw_dir, files['atac_mtx']),
+            os.path.join(raw_dir, files['atac_peaks']),
+            os.path.join(raw_dir, files['atac_barcodes'])
+        )
+
+    # 模态对齐：将 RNA 筛选后的细胞顺序应用到 ATAC，并同步空间坐标
+    adata_atac = adata_atac[adata_rna.obs_names, :].copy()
+    adata_atac.obsm['spatial'] = adata_rna.obsm['spatial'].copy()
 
     # ==========================================
     # Step 2: 严格对齐检查 (不取交集，仅验证)

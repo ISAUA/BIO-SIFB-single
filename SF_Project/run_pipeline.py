@@ -7,6 +7,7 @@ import sys
 DATASET_CONFIG = {
     "human": "configs/config_human.yaml",
     "mouse": "configs/config_mouse.yaml",
+    "misar_e18": "configs/config_misar_e18.yaml",
 }
 
 ALL_STEPS = ["preprocess", "train", "evaluate"]

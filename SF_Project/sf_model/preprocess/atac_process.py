@@ -235,10 +235,11 @@ def process_atac_pipeline(
     # 1. 基础过滤
     sc.pp.filter_genes(adata, min_cells=min_cells)
     
-    # 2. 全局变异度筛选 (flavor=seurat)
+    # 2. 全局变异度筛选
+    # ATAC 输入是原始计数，使用 cell_ranger 口径可避免 seurat 路径中的 expm1 溢出。
     print(f"Selecting top {n_global} peaks by variance...")
     try:
-        sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=n_global)
+        sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=n_global)
         adata = adata[:, adata.var['highly_variable']].copy()
     except Exception as e:
         print(f"Warning in HVG selection: {e}. Skipping.")
@@ -250,7 +251,7 @@ def process_atac_pipeline(
         # 二次筛选
         if adata.shape[1] > n_final:
             print(f"Downsampling to {n_final} peaks...")
-            sc.pp.highly_variable_genes(adata, flavor="seurat", n_top_genes=n_final)
+            sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=n_final)
             hvg_mask = adata.var['highly_variable'].values
             # 处理 ties 或浮动导致的 > n_final 的情况，强制截断到 n_final
             if hvg_mask.sum() > n_final:

@@ -1,6 +1,6 @@
 # BIO-SFIB Pipeline 使用说明
 
-本项目提供统一入口脚本用于预处理、训练与评估多组学空间数据，可在不同数据集之间灵活切换，目前内置 human 与 P22 mouse。
+本项目提供统一入口脚本用于预处理、训练与评估多组学空间数据，可在不同数据集之间灵活切换，目前内置 human、P22 mouse 与 MISAR E18。
 
 ## 依赖安装
 
@@ -15,6 +15,7 @@ pip install -r requirements.txt
 ```bash
 python run_pipeline.py --dataset human
 python run_pipeline.py --dataset mouse
+python run_pipeline.py --dataset misar_e18
 ```
 
 ### 2) 仅运行部分阶段
@@ -47,6 +48,10 @@ python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.p
 - 内置配置文件：
 	- human: configs/config_human.yaml
 	- mouse: configs/config_mouse.yaml（P22 小鼠脑数据，结果输出至 results/mouse）。
+	- misar_e18: configs/config_misar_e18.yaml（MISAR-seq h5 + csv 数据，结果输出至 results/misar_e18）。
+- 预处理会根据所选数据集配置自动选择读取方式：
+	- human/mouse: mtx + tsv/csv 分文件读取
+	- misar_e18: 10x multiome h5 + 空间 csv 读取
 - 如需新增数据集，准备对应 YAML 配置并加入映射后即可使用 `--dataset <new>` 运行。
 
 ## 目录约定
@@ -60,7 +65,9 @@ python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.p
 
 - 全流程（human）：`python run_pipeline.py --dataset human`
 - 全流程（mouse）：`python run_pipeline.py --dataset mouse`
+- 全流程（misar_e18）：`python run_pipeline.py --dataset misar_e18`
 - 仅预处理：`python run_pipeline.py --dataset human --steps preprocess`
+- 仅预处理（misar_e18）：`python run_pipeline.py --dataset misar_e18 --steps preprocess`
 - 仅训练：`python run_pipeline.py --dataset human --steps train`
 - 仅评估：`python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.pth`
 - 评估和绘图参数：`python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9`

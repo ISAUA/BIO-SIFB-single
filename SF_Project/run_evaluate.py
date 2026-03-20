@@ -6,6 +6,8 @@ import yaml
 import numpy as np
 import scanpy as sc
 import matplotlib.pyplot as plt
+import scipy.sparse as sp
+from sklearn.neighbors import NearestNeighbors
 from sf_model.utils import set_seed
 
 # 引入模型
@@ -26,15 +28,62 @@ def parse_args():
 def infer_epoch_label(ckpt_name):
     """
     从 checkpoint 文件名中推断 epoch 标签，便于图上标注。
-    例如 ckpt_150.pth -> "第 150 个 epoch"；ckpt_best.pth -> "最佳 (best)"。
+    例如 ckpt_150.pth -> "Epoch 150"；ckpt_best.pth -> "BEST (best)"。
     """
     base = os.path.splitext(os.path.basename(ckpt_name))[0]
     match = re.search(r"ckpt[_-]?(\d+)", base)
     if match:
-        return f"Epoch {match.group(1)} "
+        return f"Epoch {match.group(1)}"
     if "best" in base.lower():
         return "BEST (best)"
     return base
+
+# ==============================================================================
+# 独立计算模块：纯数学矩阵实现的 Moran's I
+# ==============================================================================
+def calculate_spatial_morans_i(coords, features, k=6):
+    """
+    纯 Numpy/Scipy 实现的 Moran's I，完全避开图状态冲突。
+    支持对连续 Embedding 或 One-hot 编码后的聚类标签进行评估。
+    """
+    N = coords.shape[0]
+    # 1. 独立构建基于物理坐标的 KNN 空间权重矩阵
+    nbrs = NearestNeighbors(n_neighbors=k+1).fit(coords)
+    _, indices = nbrs.kneighbors(coords)
+    
+    # 提取边（排除自身）
+    src = np.repeat(np.arange(N), k)
+    dst = indices[:, 1:].flatten()
+    
+    # 构建稀疏矩阵并对称化（无向图）
+    W = sp.coo_matrix((np.ones_like(src), (src, dst)), shape=(N, N))
+    W = W.maximum(W.T)
+    
+    # 行归一化 (Row-normalize)
+    row_sums = np.array(W.sum(axis=1)).flatten()
+    row_sums[row_sums == 0] = 1.0
+    W_norm = W.multiply(1.0 / row_sums[:, None])
+    
+    # 2. 计算莫兰指数
+    features = np.asarray(features, dtype=np.float32)
+    # 兼容一维特征输入
+    if features.ndim == 1:
+        features = features[:, np.newaxis]
+        
+    mean_feat = np.mean(features, axis=0)
+    centered_feat = features - mean_feat
+    
+    # 方差项 (分母)
+    var = np.sum(centered_feat ** 2, axis=0)
+    var[var == 0] = 1e-10  # 防止除零
+    
+    # 空间自协方差项 (分子)
+    cov = np.sum(centered_feat * (W_norm @ centered_feat), axis=0)
+    
+    morans_i_vals = cov / var
+    return np.mean(morans_i_vals), morans_i_vals
+# ==============================================================================
+
 
 def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None):
     """
@@ -74,7 +123,26 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     except Exception as e:
         print("   ⚠️ Leiden clustering failed (maybe install leidenalg?), falling back to louvain.")
         sc.tl.louvain(adata, resolution=resolution, key_added='cluster')
-    
+        
+    # ==============================================================================
+    # 无侵入式聚合度评估 (Moran's I) - 不打印终端，仅用于顶部图标题
+    # ==============================================================================
+    moran_title_str = ""
+    try:
+        # 评估视角 1：连续隐特征 z_final 的平均空间自相关性
+        mi_latent_avg, _ = calculate_spatial_morans_i(coords, z_final, k=6)
+        
+        # 评估视角 2：离散聚类标签的空间连贯性
+        cluster_labels = adata.obs['cluster'].values.astype(int)
+        num_clusters = np.max(cluster_labels) + 1
+        one_hot_clusters = np.eye(num_clusters)[cluster_labels]
+        mi_cluster_avg, _ = calculate_spatial_morans_i(coords, one_hot_clusters, k=6)
+        
+        moran_title_str = f" | Latent Moran's I: {mi_latent_avg:.4f} | Cluster Moran's I: {mi_cluster_avg:.4f}"
+    except Exception as e:
+        moran_title_str = " | Moran's I Error"
+    # ==============================================================================
+
     # 3. 绘图 (UMAP + Spatial)
     # 设置绘图风格
     # 统一高对比色与画布参数
@@ -84,13 +152,13 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     print("   -> Plotting...")
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
     
-    # 左图: UMAP
+    # 左图: UMAP (已按要求修改标题)
     sc.pl.umap(
         adata,
         color='cluster',
         ax=axs[0],
         show=False,
-        title='Bio-SFINet Joint Embedding (UMAP)',
+        title='UMAP',
         legend_loc='on data',
         frameon=True,
         size=60,  # 加大点径，减少缝隙
@@ -120,12 +188,13 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     # 翻转 Y 轴以匹配常见的显微镜视角 (可选)
     # axs[1].invert_yaxis() 
     
-    # 在图外标注使用的 epoch 信息
+    # 在图外标注使用的 epoch 信息以及莫兰指数 (全英文)
     if epoch_label:
+        title_text = f"Weights: {epoch_label}{moran_title_str}"
         fig.text(
             0.5,
             0.99,
-            f"使用 {epoch_label} 的权重进行绘图",
+            title_text,
             ha="center",
             va="top",
             fontsize=12

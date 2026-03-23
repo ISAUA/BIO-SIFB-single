@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import os
 import logging
+import math
 from .utils import CLIPLoss
 
 # 1. 加权 MSE Loss 类 (保持不变)
@@ -62,8 +63,27 @@ class SFTrainer:
         self.log_interval = int(self.train_cfg.get('log_interval', 10))
         self.best_name = self.train_cfg.get('best_name', 'ckpt_best.pth')
         self.best_path = os.path.join(self.save_dir, self.best_name)
+        self.epochs = int(self.train_cfg.get('epochs', 1000))
+        self.lambda_clip_init = float(self.train_cfg.get('lambda_clip', 0.1))
+        default_fade_start = self.epochs // 2
+        default_fade_end = default_fade_start + 400
+        self.fade_start_epoch = int(self.train_cfg.get('fade_start_epoch', default_fade_start))
+        self.fade_end_epoch = int(self.train_cfg.get('fade_end_epoch', default_fade_end))
+        if self.fade_end_epoch < self.fade_start_epoch:
+            self.fade_end_epoch = self.fade_start_epoch
 
-    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis):
+    def get_current_clip_weight(self, epoch):
+        if epoch <= self.fade_start_epoch:
+            return self.lambda_clip_init
+        if epoch > self.fade_end_epoch:
+            return 0.0
+
+        anneal_span = max(1, self.fade_end_epoch - self.fade_start_epoch)
+        progress = (epoch - self.fade_start_epoch) / anneal_span
+        cosine_scale = 0.5 * (1.0 + math.cos(math.pi * progress))
+        return self.lambda_clip_init * cosine_scale
+
+    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, epoch):
         self.model.train()
         self.optimizer.zero_grad()
         
@@ -82,11 +102,15 @@ class SFTrainer:
         loss_rec_atac = self.criterion_atac(rec_atac, atac_feat)
         
         # 2. 对齐损失
-        loss_clip = self.clip_criterion(p_rna, p_atac)
+        clip_weight = self.get_current_clip_weight(epoch)
+        if clip_weight > 0.0:
+            loss_clip = self.clip_criterion(p_rna, p_atac)
+        else:
+            loss_clip = torch.tensor(0.0, device=self.device)
         
         lambda_r = float(self.train_cfg.get('lambda_rna', 1.0))
         lambda_a = float(self.train_cfg.get('lambda_atac', 1.0))
-        lambda_c = float(self.train_cfg.get('lambda_clip', 0.1))
+        lambda_c = clip_weight
         
         total_loss = lambda_r * loss_rec_rna + lambda_a * loss_rec_atac + lambda_c * loss_clip
         
@@ -97,15 +121,16 @@ class SFTrainer:
             "total": total_loss.item(),
             "rec_rna": loss_rec_rna.item(),
             "rec_atac": loss_rec_atac.item(),
-            "clip": loss_clip.item()
+            "clip": loss_clip.item(),
+            "clip_weight": clip_weight
         }
 
     def run(self, rna_data, atac_data, edge_index, u_basis):
-        epochs = self.config['train']['epochs']
+        epochs = self.epochs
         best_loss = float('inf')
 
         for epoch in range(1, epochs + 1):
-            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis)
+            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, epoch)
 
             # 更新学习率调度
             self.lr_scheduler.step()
@@ -120,7 +145,8 @@ class SFTrainer:
                 print(
                     f"Epoch {epoch:03d} | total {metrics['total']:.4f} | "
                     f"rec_rna {metrics['rec_rna']:.4f} | rec_atac {metrics['rec_atac']:.4f} | "
-                    f"clip {metrics['clip']:.4f} | lr {current_lr:.2e} | best {best_display}"
+                    f"clip {metrics['clip']:.4f} | clip_weight {metrics['clip_weight']:.4f} | "
+                    f"lr {current_lr:.2e} | best {best_display}"
                 )
 
             if epoch % self.save_every == 0:

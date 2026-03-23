@@ -38,7 +38,7 @@ data:
     atac_target_sum: 1e4                # ATAC 归一化目标总和
     tfidf_eps: 1e-6                     # TF-IDF 平滑项
     tss_window: 150000                  # TSS 上下游窗口大小 (bp)
-    knn_k: 10                           # 构图的 k 近邻
+    knn_k: 6                           # 构图的 k 近邻
 
 # ------------------------------------------
 # 2. 模型架构参数
@@ -67,15 +67,17 @@ model:
 # 3. 训练策略参数
 # ------------------------------------------
 train:
-  epochs: 2000                          # 训练轮数
+  epochs: 1600                          # 训练轮数
   batch_size: 1                         # 批大小（当前实现按全量）
   learning_rate: 1e-3                   # 学习率（前 500 轮）
-  learning_rate_low: 1e-3               # 学习率（后 500 轮）
-  lr_switch_epoch: 800                  # 学习率切换轮次
+  learning_rate_low: 1e-4               # 学习率（后 500 轮）
+  lr_switch_epoch: 1000                  # 学习率切换轮次
   weight_decay: 1e-4                    # 权重衰减
   lambda_rna: 5.0                       # RNA 重构损失权重
   lambda_atac: 1.0                      # ATAC 重构损失权重
   lambda_clip: 0.5                      # 对比损失权重
+  fade_start_epoch: 800                 # CLIP 权重退火起始轮次
+  fade_end_epoch: 1200                  # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                  # RNA 重构正样本权重
   pos_weight_atac: 20.0                 # ATAC 重构正样本权重
   clip_temperature: 0.5                 # 对比损失温度

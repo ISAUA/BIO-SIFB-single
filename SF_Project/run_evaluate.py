@@ -25,17 +25,19 @@ def parse_args():
     parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
     return parser.parse_args()
 
-def infer_epoch_label(ckpt_name):
+def infer_epoch_label(ckpt_name, total_epochs=None):
     """
     从 checkpoint 文件名中推断 epoch 标签，便于图上标注。
-    例如 ckpt_150.pth -> "Epoch 150"；ckpt_best.pth -> "BEST (best)"。
+    例如 ckpt_150.pth -> "Epoch 150"；ckpt_best.pth -> "BEST (Epoch 1600)"。
     """
     base = os.path.splitext(os.path.basename(ckpt_name))[0]
     match = re.search(r"ckpt[_-]?(\d+)", base)
     if match:
         return f"Epoch {match.group(1)}"
     if "best" in base.lower():
-        return "BEST (best)"
+        if total_epochs is not None:
+            return f"BEST (Epoch {int(total_epochs)})"
+        return "BEST"
     return base
 
 # ==============================================================================
@@ -282,7 +284,8 @@ def main():
     state_dict = torch.load(ckpt_path, map_location=device)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
-    epoch_label = infer_epoch_label(ckpt_name)
+    total_epochs = config.get('train', {}).get('epochs')
+    epoch_label = infer_epoch_label(ckpt_name, total_epochs=total_epochs)
     
     # 5. 推理 (Inference)
     print("\n🔮 Running Inference...")

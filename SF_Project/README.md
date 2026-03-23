@@ -42,6 +42,23 @@ python run_pipeline.py --dataset mouse --steps preprocess,train
 python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.pth --resolution 0.6
 ```
 
+### 4) 手动开启范围评估（新增）
+
+日常训练/评估流程仍使用 `run_pipeline.py` + `run_evaluate.py`，不受影响。
+
+当你需要一次性评估一段轮次（例如 1500-2000）时，手动运行下面脚本：
+
+```bash
+python run_evaluate_range.py --config configs/config_misar_e18.yaml --start 1500 --end 2000 --step 100 --best-epoch 2000 --resolution 0.6
+```
+
+说明：
+
+- `--start/--end/--step` 可自定义评估区间。
+- 当轮次等于 `--best-epoch`（默认 2000）时，自动使用 `ckpt_best.pth`。
+- PDF 输出在 `results/<dataset>/figures/`，并在文件名末尾附加轮次后缀，例如 `spatial_analysis_epoch_1700.pdf` 与 `spatial_analysis_epoch_2000_best.pdf`。
+- h5ad 输出在 `results/<dataset>/predictions/`，同样附加轮次后缀。
+
 ## 数据集配置与扩展
 
 - 数据集配置映射在 run_pipeline.py 的 `DATASET_CONFIG` 中注册。
@@ -68,6 +85,7 @@ python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.p
 - 全流程（misar_e18）：`python run_pipeline.py --dataset misar_e18`
 - 仅预处理：`python run_pipeline.py --dataset human --steps preprocess`
 - 仅预处理（misar_e18）：`python run_pipeline.py --dataset misar_e18 --steps preprocess`
-- 仅训练：`python run_pipeline.py --dataset human --steps train`
-- 仅评估：`python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.pth`
+- 仅训练：`python run_pipeline.py --dataset misar_e18 --steps train`
+- 仅评估：`python run_pipeline.py --dataset misar_e18 --steps evaluate --checkpoint ckpt_best.pth`
 - 评估和绘图参数：`python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9`
+- 范围评估（手动开启）：`python run_evaluate_range.py --config configs/config_misar_e18.yaml --start 1500 --end 2000 --step 100 --best-epoch 2000 --resolution 0.5`

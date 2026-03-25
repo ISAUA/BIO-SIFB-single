@@ -260,6 +260,9 @@ def main():
     coords = data_dict["coords"].to(device)
     edge_index = data_dict["edge_index"].to(device)
     u_basis = data_dict["u_basis"].to(device)
+    evals = data_dict.get("evals", None)
+    if evals is not None:
+        evals = evals.to(device)
     atac_dim = data_dict["atac_dim"]
 
     # 3. 初始化模型
@@ -291,7 +294,7 @@ def main():
     print("\n🔮 Running Inference...")
     with torch.no_grad():
         # Forward pass (single fused tower)
-        outputs = model(rna_feat, atac_feat, edge_index, u_basis)
+        outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals)
         z_final = outputs[0]
         
     print(f"   -> Extracted Latent Shape: {z_final.shape}")

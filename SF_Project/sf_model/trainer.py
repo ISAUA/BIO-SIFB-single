@@ -83,18 +83,23 @@ class SFTrainer:
         cosine_scale = 0.5 * (1.0 + math.cos(math.pi * progress))
         return self.lambda_clip_init * cosine_scale
 
-    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, epoch):
+    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, evals, epoch):
         self.model.train()
         self.optimizer.zero_grad()
+
+        if hasattr(self.model, 'set_debug_epoch'):
+            self.model.set_debug_epoch(epoch)
         
         rna_feat = rna_feat.to(self.device)
         atac_feat = atac_feat.to(self.device)
         edge_index = edge_index.to(self.device)
         u_basis = u_basis.to(self.device)
+        if evals is not None:
+            evals = evals.to(self.device)
         
         # Forward pass (single fused tower with optional pre-fusion contrastive heads)
         z_fused, p_rna, p_atac, rec_rna, rec_atac, *_ = self.model(
-            rna_feat, atac_feat, edge_index, u_basis
+            rna_feat, atac_feat, edge_index, u_basis, evals
         )
         
         # 1. 重构损失
@@ -125,12 +130,12 @@ class SFTrainer:
             "clip_weight": clip_weight
         }
 
-    def run(self, rna_data, atac_data, edge_index, u_basis):
+    def run(self, rna_data, atac_data, edge_index, u_basis, evals=None):
         epochs = self.epochs
         best_loss = float('inf')
 
         for epoch in range(1, epochs + 1):
-            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, epoch)
+            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, evals, epoch)
 
             # 更新学习率调度
             self.lr_scheduler.step()

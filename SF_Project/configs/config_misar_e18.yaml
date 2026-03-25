@@ -62,6 +62,9 @@ model:
   rna_dec_blocks: 1                     # RNA 解码器残差块数
   atac_dec_hidden: 512                  # ATAC 解码器隐藏维度
   atac_dec_blocks: 1                    # ATAC 解码器残差块数
+  sfib_debug_mode: false                 # 是否启用 SFIB 调试模式（输出中间特征）
+  model.sfib_debug_epochs: [1, 10, 20]  # sfib_debug_epochs: [1, 10, 50, 100, 200, 500, 1000]  # SFIB 调试模式输出的特定训练轮次
+  model.sfib_debug_every_n_epochs: 20   # SFIB 调试模式每隔多少轮输出一次（如果 sfib_debug_epochs 为空则启用）
 
 # ------------------------------------------
 # 3. 训练策略参数
@@ -69,8 +72,8 @@ model:
 train:
   epochs: 1600                          # 训练轮数
   batch_size: 1                         # 批大小（当前实现按全量）
-  learning_rate: 1e-3                   # 学习率（前 500 轮）
-  learning_rate_low: 1e-4               # 学习率（后 500 轮）
+  learning_rate: 1e-3                   # 学习率（前 1000 轮）
+  learning_rate_low: 1e-4               # 学习率（后 600 轮）
   lr_switch_epoch: 1000                  # 学习率切换轮次
   weight_decay: 1e-4                    # 权重衰减
   lambda_rna: 5.0                       # RNA 重构损失权重

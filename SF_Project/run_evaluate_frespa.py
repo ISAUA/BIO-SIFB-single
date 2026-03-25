@@ -134,6 +134,9 @@ def main():
     coords = data_dict["coords"].to(device)
     edge_index = data_dict["edge_index"].to(device)
     u_basis = data_dict["u_basis"].to(device)
+    evals = data_dict.get("evals", None)
+    if evals is not None:
+        evals = evals.to(device)
     atac_dim = data_dict["atac_dim"]
 
     print("🧠 Initializing BioSFINet ...")
@@ -157,7 +160,7 @@ def main():
 
     print("🔮 Running inference ...")
     with torch.no_grad():
-        z_fused, _, _, _, _, _, _, z_base, z_detail = model(rna_feat, atac_feat, edge_index, u_basis)
+        z_fused, _, _, _, _, _, _, z_base, z_detail = model(rna_feat, atac_feat, edge_index, u_basis, evals)
 
     # Save and plot frequency branch (z_base) and spatial branch (z_detail)
     visualize_and_save(z_base, coords, save_dir, args.resolution, label="freq", epoch_label=epoch_label)

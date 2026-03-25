@@ -41,11 +41,16 @@ def main():
     coords = data_dict["coords"]
     edge_index = data_dict["edge_index"]
     u_basis = data_dict["u_basis"]
+    evals = data_dict.get("evals", None)
     atac_dim = data_dict["atac_dim"]
     
     print(f"   -> RNA Shape: {rna_feat.shape}")
     print(f"   -> ATAC Shape: {atac_feat.shape}")
     print(f"   -> Graph Edges: {edge_index.shape[1]}")
+    if evals is None:
+        print("   -> evals: not found in processed_data.pt (fallback without eigenvalue penalty)")
+    else:
+        print(f"   -> evals Shape: {evals.shape}")
 
     # 3. 初始化模型
     print("\n🧠 Initializing Bio-SFINet...")
@@ -57,7 +62,7 @@ def main():
     
     # 5. 开始训练
     print("\n🟢 STARTING TRAINING...")
-    trainer.run(rna_feat, atac_feat, edge_index, u_basis)
+    trainer.run(rna_feat, atac_feat, edge_index, u_basis, evals)
 
 if __name__ == "__main__":
     main()

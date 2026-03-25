@@ -67,17 +67,25 @@ from sklearn.neighbors import NearestNeighbors
 #     return edge_index, u_basis
 
 
-def build_spatial_graph(coords, features=None, k=6):
+def build_spatial_graph(coords, features=None, k=6, device=None):
     """
     构建空间 KNN 图并计算 GFT 基底。
     - 默认：RNA 特征欧氏距离 + 高斯核衰减 (features 不为 None 时)
     - 备选：空间欧氏距离 + 高斯核衰减 (已注释，可手动切换)
     """
-    N = coords.shape[0]
+    if isinstance(coords, torch.Tensor):
+        inferred_device = coords.device
+        coords_np = coords.detach().cpu().numpy()
+    else:
+        inferred_device = torch.device("cpu")
+        coords_np = np.asarray(coords)
+
+    target_device = device if device is not None else inferred_device
+    N = coords_np.shape[0]
     
     # 1. 构建物理 KNN 图 (确定谁是邻居)
-    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree').fit(coords)
-    distances, indices = nbrs.kneighbors(coords)
+    nbrs = NearestNeighbors(n_neighbors=k+1, algorithm='ball_tree').fit(coords_np)
+    distances, indices = nbrs.kneighbors(coords_np)
     
     # 排除自身 (第0列是自身)
     src = np.repeat(np.arange(N), k)
@@ -85,6 +93,11 @@ def build_spatial_graph(coords, features=None, k=6):
     
     # 2. 计算边权重 (默认：特征欧氏距离高斯衰减)
     if features is not None:
+        if isinstance(features, torch.Tensor):
+            features = features.detach().cpu().numpy()
+        else:
+            features = np.asarray(features)
+
         f_src = features[src]
         f_dst = features[dst]
 
@@ -151,12 +164,14 @@ def build_spatial_graph(coords, features=None, k=6):
     # 5. 特征分解提取频率基底
     evals, evecs = np.linalg.eigh(laplacian.toarray())
     idx = np.argsort(evals)
+    evals = evals[idx]
     evecs = evecs[:, idx]
     
     u_basis = torch.FloatTensor(evecs)
+    evals = torch.FloatTensor(evals).to(target_device)
     edge_index = torch.tensor(np.array([src, dst]), dtype=torch.long)
     
-    return edge_index, u_basis
+    return edge_index, u_basis, evals
 
 
 

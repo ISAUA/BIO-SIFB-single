@@ -162,7 +162,7 @@ def main():
     coords = adata_rna.obsm['spatial']
     # 默认：RNA 特征欧氏距离权重；若需空间距离衰减，注释下行并启用备选行
     rna_features = adata_rna.X
-    edge_index, u_basis = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
+    edge_index, u_basis, evals = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
     # 备选：使用空间距离高斯衰减
     # edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
 
@@ -189,6 +189,7 @@ def main():
         "coords": coords_tensor,
         "edge_index": edge_index,
         "u_basis": u_basis,
+        "evals": evals,
         "atac_dim": atac_feat.shape[1] # 记录动态 ATAC 维度
     }
     

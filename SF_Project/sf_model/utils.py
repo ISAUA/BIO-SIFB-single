@@ -178,6 +178,8 @@ def build_spatial_graph(coords, features=None, k=6, device=None):
 def set_seed(seed: int = 42, deterministic: bool = True):
     """全局锁定随机种子，尽可能消除非确定性。"""
     seed = int(seed)
+    # CUDA + CuBLAS 在 deterministic 模式下需要该环境变量。
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)

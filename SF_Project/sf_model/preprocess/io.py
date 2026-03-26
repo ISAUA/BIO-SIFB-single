@@ -5,6 +5,75 @@ import numpy as np
 import os
 import scanpy as sc
 
+
+def _ensure_spatial_from_obs(adata):
+    """
+    若 adata.obsm['spatial'] 不存在，则尝试从 obs 中推断空间坐标列并写入 obsm。
+    """
+    if 'spatial' in adata.obsm:
+        return adata
+
+    lower_to_col = {c.lower(): c for c in adata.obs.columns}
+    x_candidates = [
+        'imagecol', 'array_col', 'arraycol', 'x',
+        'pxl_col_in_fullres', 'col', 'coord_x'
+    ]
+    y_candidates = [
+        'imagerow', 'array_row', 'arrayrow', 'y',
+        'pxl_row_in_fullres', 'row', 'coord_y'
+    ]
+
+    x_col = next((lower_to_col[c] for c in x_candidates if c in lower_to_col), None)
+    y_col = next((lower_to_col[c] for c in y_candidates if c in lower_to_col), None)
+    if x_col is None or y_col is None:
+        return adata
+
+    adata.obsm['spatial'] = adata.obs[[x_col, y_col]].to_numpy(dtype=np.float32)
+    return adata
+
+
+def read_h5ad_rna_atac(rna_h5ad_path, atac_h5ad_path):
+    """
+    读取 RNA/ATAC 两个 h5ad 文件，并按细胞条码严格对齐。
+    优先使用 RNA 的空间坐标；若 RNA 无空间坐标则回退到 ATAC。
+    """
+    print(f"Reading RNA h5ad from: {rna_h5ad_path}")
+    adata_rna = sc.read_h5ad(rna_h5ad_path)
+    print(f"Reading ATAC h5ad from: {atac_h5ad_path}")
+    adata_atac = sc.read_h5ad(atac_h5ad_path)
+
+    adata_rna.obs_names = adata_rna.obs_names.astype(str)
+    adata_atac.obs_names = adata_atac.obs_names.astype(str)
+    adata_rna.var_names = adata_rna.var_names.astype(str)
+    adata_atac.var_names = adata_atac.var_names.astype(str)
+    adata_rna.var_names_make_unique()
+    adata_atac.var_names_make_unique()
+
+    common_cells = adata_rna.obs_names.intersection(adata_atac.obs_names)
+    if len(common_cells) == 0:
+        raise ValueError("No overlapping barcodes between RNA and ATAC h5ad files.")
+
+    if len(common_cells) < adata_rna.n_obs or len(common_cells) < adata_atac.n_obs:
+        print(f"Warning: Keeping {len(common_cells)} intersected cells from RNA/ATAC h5ad files.")
+
+    adata_rna = adata_rna[common_cells, :].copy()
+    adata_atac = adata_atac[common_cells, :].copy()
+
+    adata_rna = _ensure_spatial_from_obs(adata_rna)
+    adata_atac = _ensure_spatial_from_obs(adata_atac)
+
+    if 'spatial' in adata_rna.obsm:
+        adata_atac.obsm['spatial'] = np.asarray(adata_rna.obsm['spatial'], dtype=np.float32)
+    elif 'spatial' in adata_atac.obsm:
+        adata_rna.obsm['spatial'] = np.asarray(adata_atac.obsm['spatial'], dtype=np.float32)
+    else:
+        raise ValueError("No spatial coordinates found in h5ad files (expected obsm['spatial'] or coordinate columns in obs).")
+
+    adata_rna.X = sparse.csr_matrix(adata_rna.X, dtype=np.float32)
+    adata_atac.X = sparse.csr_matrix(adata_atac.X, dtype=np.float32)
+
+    return adata_rna, adata_atac
+
 def read_mtx_to_adata(mtx_path, features_path, barcodes_path, transpose=True):
     """
     读取 MTX 文件并构建 AnnData (逻辑源自 prepare_adata.py)

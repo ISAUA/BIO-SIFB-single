@@ -5,10 +5,15 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import scanpy as sc
-import scipy.sparse as sp
+import squidpy as sq
 import torch
 import yaml
-from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import (
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+    adjusted_mutual_info_score,
+    homogeneity_score,
+)
 
 from sf_model.model.bio_sfinet import BioSFINet
 from sf_model.utils import set_seed
@@ -32,35 +37,74 @@ def parse_args():
 
 def calculate_spatial_morans_i(coords, features, k=6):
     """
-    纯 Numpy/Scipy 实现的 Moran's I。
+    基于 squidpy 计算 Moran's I。
     """
-    n_cells = coords.shape[0]
-    nbrs = NearestNeighbors(n_neighbors=k + 1).fit(coords)
-    _, indices = nbrs.kneighbors(coords)
-
-    src = np.repeat(np.arange(n_cells), k)
-    dst = indices[:, 1:].flatten()
-
-    w = sp.coo_matrix((np.ones_like(src), (src, dst)), shape=(n_cells, n_cells))
-    w = w.maximum(w.T)
-
-    row_sums = np.array(w.sum(axis=1)).flatten()
-    row_sums[row_sums == 0] = 1.0
-    w_norm = w.multiply(1.0 / row_sums[:, None])
-
+    coords = np.asarray(coords, dtype=np.float32)
     features = np.asarray(features, dtype=np.float32)
     if features.ndim == 1:
         features = features[:, np.newaxis]
 
-    mean_feat = np.mean(features, axis=0)
-    centered_feat = features - mean_feat
+    valid_mask = np.var(features, axis=0) > 0
+    if not np.any(valid_mask):
+        morans_i_vals = np.zeros(features.shape[1], dtype=np.float32)
+        return float(np.mean(morans_i_vals)), morans_i_vals
 
-    var = np.sum(centered_feat ** 2, axis=0)
-    var[var == 0] = 1e-10
+    adata_moran = sc.AnnData(X=features[:, valid_mask])
+    adata_moran.obsm["spatial"] = coords
 
-    cov = np.sum(centered_feat * (w_norm @ centered_feat), axis=0)
-    morans_i_vals = cov / var
+    sq.gr.spatial_neighbors(adata_moran, coord_type="generic", n_neighs=int(k))
+    sq.gr.spatial_autocorr(
+        adata_moran,
+        mode="moran",
+        n_perms=None,
+        show_progress_bar=False,
+    )
+
+    moran_df = adata_moran.uns["moranI"]
+    valid_vals = moran_df["I"].to_numpy(dtype=np.float32)
+    morans_i_vals = np.zeros(features.shape[1], dtype=np.float32)
+    morans_i_vals[valid_mask] = valid_vals
     return np.mean(morans_i_vals), morans_i_vals
+
+
+def calculate_clustering_scores(cluster_labels, ground_truth):
+    if ground_truth is None:
+        return None
+
+    gt = np.asarray(ground_truth)
+    pred = np.asarray(cluster_labels)
+    if gt.shape[0] != pred.shape[0]:
+        return None
+
+    adata_obs = sc.AnnData(X=np.zeros((gt.shape[0], 1), dtype=np.float32)).obs
+    adata_obs["ground_truth"] = gt
+    adata_obs["pred_cluster"] = pred
+    adata_obs = adata_obs.dropna(subset=["ground_truth", "pred_cluster"])
+    if adata_obs.shape[0] < 2:
+        return None
+
+    gt_valid = adata_obs["ground_truth"].astype(str).to_numpy()
+    pred_valid = adata_obs["pred_cluster"].astype(str).to_numpy()
+
+    non_empty = np.array([
+        (g.strip() != "") and (g.lower() != "nan") and (p.strip() != "") and (p.lower() != "nan")
+        for g, p in zip(gt_valid, pred_valid)
+    ])
+    gt_valid = gt_valid[non_empty]
+    pred_valid = pred_valid[non_empty]
+    if gt_valid.shape[0] < 2:
+        return None
+
+    if np.unique(gt_valid).size < 2:
+        return None
+
+    return {
+        "ARI": float(adjusted_rand_score(gt_valid, pred_valid)),
+        "NMI": float(normalized_mutual_info_score(gt_valid, pred_valid)),
+        "AMI": float(adjusted_mutual_info_score(gt_valid, pred_valid)),
+        "HOM": float(homogeneity_score(gt_valid, pred_valid)),
+        "n_valid": int(gt_valid.shape[0]),
+    }
 
 
 def infer_epoch_label(ckpt_name, epoch):
@@ -75,7 +119,7 @@ def infer_epoch_label(ckpt_name, epoch):
     return f"Epoch {epoch}"
 
 
-def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, output_suffix=None):
+def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, output_suffix=None, ground_truth=None):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
     if isinstance(coords, torch.Tensor):
@@ -100,6 +144,7 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
 
     moran_title_str = ""
+    cluster_scores = None
     try:
         mi_latent_avg, _ = calculate_spatial_morans_i(coords, z_final, k=6)
         cluster_labels = adata.obs["cluster"].values.astype(int)
@@ -110,6 +155,15 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
             f" | Latent Moran's I: {mi_latent_avg:.4f}"
             f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
         )
+
+        cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
+        if cluster_scores is not None:
+            moran_title_str += (
+                f" | ARI: {cluster_scores['ARI']:.4f}"
+                f" | NMI: {cluster_scores['NMI']:.4f}"
+                f" | AMI: {cluster_scores['AMI']:.4f}"
+                f" | HOM: {cluster_scores['HOM']:.4f}"
+            )
     except Exception:
         moran_title_str = " | Moran's I Error"
 
@@ -175,6 +229,24 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     h5ad_path = os.path.join(pred_dir, f"embedding_joint_{suffix}.h5ad")
     adata.write(h5ad_path)
 
+    if cluster_scores is not None:
+        metrics_path = os.path.join(pred_dir, f"cluster_metrics_{suffix}.txt")
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            f.write(f"ARI\t{cluster_scores['ARI']:.6f}\n")
+            f.write(f"NMI\t{cluster_scores['NMI']:.6f}\n")
+            f.write(f"AMI\t{cluster_scores['AMI']:.6f}\n")
+            f.write(f"HOM\t{cluster_scores['HOM']:.6f}\n")
+            f.write(f"n_valid\t{cluster_scores['n_valid']}\n")
+        print(f"✅ GT clustering metrics saved to: {metrics_path}")
+        print(
+            f"   -> ARI={cluster_scores['ARI']:.4f}, "
+            f"NMI={cluster_scores['NMI']:.4f}, "
+            f"AMI={cluster_scores['AMI']:.4f}, "
+            f"HOM={cluster_scores['HOM']:.4f}"
+        )
+    else:
+        print("   ⚠️ Ground truth unavailable or invalid; skip ARI/NMI/AMI/HOM.")
+
     return plot_path, h5ad_path
 
 
@@ -228,6 +300,7 @@ def main():
     if evals is not None:
         evals = evals.to(device)
     atac_dim = data_dict["atac_dim"]
+    ground_truth = data_dict.get("ground_truth", None)
 
     print("\n🧠 Initializing Bio-SFINet...")
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
@@ -265,6 +338,7 @@ def main():
             resolution=args.resolution,
             epoch_label=epoch_label,
             output_suffix=suffix,
+            ground_truth=ground_truth,
         )
 
         print(f"✅ Saved figure: {plot_path}")

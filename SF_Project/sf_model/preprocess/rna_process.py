@@ -17,8 +17,7 @@ def process_rna_pipeline(adata, n_top_genes=3000, min_cells=3, target_sum=1e4):
         adata.X = np.array(adata.X, dtype=np.float32)
 
     # 1. 基础过滤
-    # ⚠️ 警告：绝对不要在这里使用 filter_cells，除非你同时去过滤 ATAC 数据
-    # sc.pp.filter_cells(adata, min_genes=200)  <-- 必须删掉或注释掉
+    # ⚠️ 不要在这里 filter_cells；否则会导致 RNA/ATAC 细胞数不一致。
     
     # 过滤基因是可以的，因为这只改变列数 (Features)，不改变行数 (Cells)
     sc.pp.filter_genes(adata, min_cells=min_cells)
@@ -36,19 +35,19 @@ def process_rna_pipeline(adata, n_top_genes=3000, min_cells=3, target_sum=1e4):
         print(f"Error in Seurat V3: {e}")
         raise e
     
-    # HVG 子集化后再确保 X 为 float32 且用 dense，避免后续 normalize_total 的 dtype / 稀疏除法问题
+    # HVG 子集化后再确保 X 为 float32 且用 dense，保证后续 Scanpy 归一化稳定
     if sp.issparse(adata.X):
         adata.X = adata.X.toarray().astype(np.float32)
     else:
         adata.X = np.array(adata.X, dtype=np.float32)
 
-    # 3. 标准化 (Normalize) — 手工实现，避免 normalize_total 的 dtype 兼容问题
+    # 3. 标准化 (Normalize) — 直接调用 Scanpy
     print("   [RNA] Normalizing...")
     X = np.asarray(adata.X, dtype=np.float32)
-    counts_per_cell = X.sum(axis=1, keepdims=True)
-    counts_per_cell[counts_per_cell == 0] = 1.0  # 防止除零
-    X = (X / counts_per_cell) * float(target_sum)
+    X[np.isinf(X)] = 0.0
+    X[np.isnan(X)] = 0.0
     adata.X = X
+    sc.pp.normalize_total(adata, target_sum=float(target_sum))
     
     # 4. 对数化 (Log1p)
     print("   [RNA] Log transforming...")

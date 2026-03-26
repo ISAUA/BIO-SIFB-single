@@ -5,9 +5,14 @@ import torch
 import yaml
 import numpy as np
 import scanpy as sc
+import squidpy as sq
 import matplotlib.pyplot as plt
-import scipy.sparse as sp
-from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import (
+    adjusted_rand_score,
+    normalized_mutual_info_score,
+    adjusted_mutual_info_score,
+    homogeneity_score,
+)
 from sf_model.utils import set_seed
 
 # 引入模型
@@ -40,54 +45,81 @@ def infer_epoch_label(ckpt_name, total_epochs=None):
         return "BEST"
     return base
 
-# ==============================================================================
-# 独立计算模块：纯数学矩阵实现的 Moran's I
-# ==============================================================================
 def calculate_spatial_morans_i(coords, features, k=6):
     """
-    纯 Numpy/Scipy 实现的 Moran's I，完全避开图状态冲突。
+    基于 squidpy 计算 Moran's I。
     支持对连续 Embedding 或 One-hot 编码后的聚类标签进行评估。
     """
-    N = coords.shape[0]
-    # 1. 独立构建基于物理坐标的 KNN 空间权重矩阵
-    nbrs = NearestNeighbors(n_neighbors=k+1).fit(coords)
-    _, indices = nbrs.kneighbors(coords)
-    
-    # 提取边（排除自身）
-    src = np.repeat(np.arange(N), k)
-    dst = indices[:, 1:].flatten()
-    
-    # 构建稀疏矩阵并对称化（无向图）
-    W = sp.coo_matrix((np.ones_like(src), (src, dst)), shape=(N, N))
-    W = W.maximum(W.T)
-    
-    # 行归一化 (Row-normalize)
-    row_sums = np.array(W.sum(axis=1)).flatten()
-    row_sums[row_sums == 0] = 1.0
-    W_norm = W.multiply(1.0 / row_sums[:, None])
-    
-    # 2. 计算莫兰指数
+    coords = np.asarray(coords, dtype=np.float32)
     features = np.asarray(features, dtype=np.float32)
-    # 兼容一维特征输入
     if features.ndim == 1:
         features = features[:, np.newaxis]
-        
-    mean_feat = np.mean(features, axis=0)
-    centered_feat = features - mean_feat
-    
-    # 方差项 (分母)
-    var = np.sum(centered_feat ** 2, axis=0)
-    var[var == 0] = 1e-10  # 防止除零
-    
-    # 空间自协方差项 (分子)
-    cov = np.sum(centered_feat * (W_norm @ centered_feat), axis=0)
-    
-    morans_i_vals = cov / var
+
+    # 常量特征会导致 Moran's I 不可定义，先过滤掉并保留回填结构。
+    valid_mask = np.var(features, axis=0) > 0
+    if not np.any(valid_mask):
+        morans_i_vals = np.zeros(features.shape[1], dtype=np.float32)
+        return float(np.mean(morans_i_vals)), morans_i_vals
+
+    adata_moran = sc.AnnData(X=features[:, valid_mask])
+    adata_moran.obsm['spatial'] = coords
+
+    sq.gr.spatial_neighbors(adata_moran, coord_type='generic', n_neighs=int(k))
+    sq.gr.spatial_autocorr(
+        adata_moran,
+        mode='moran',
+        n_perms=None,
+        show_progress_bar=False,
+    )
+
+    moran_df = adata_moran.uns['moranI']
+    valid_vals = moran_df['I'].to_numpy(dtype=np.float32)
+    morans_i_vals = np.zeros(features.shape[1], dtype=np.float32)
+    morans_i_vals[valid_mask] = valid_vals
     return np.mean(morans_i_vals), morans_i_vals
-# ==============================================================================
 
 
-def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None):
+def calculate_clustering_scores(cluster_labels, ground_truth):
+    if ground_truth is None:
+        return None
+
+    gt = np.asarray(ground_truth)
+    pred = np.asarray(cluster_labels)
+    if gt.shape[0] != pred.shape[0]:
+        return None
+
+    adata_obs = sc.AnnData(X=np.zeros((gt.shape[0], 1), dtype=np.float32)).obs
+    adata_obs["ground_truth"] = gt
+    adata_obs["pred_cluster"] = pred
+    adata_obs = adata_obs.dropna(subset=["ground_truth", "pred_cluster"])
+    if adata_obs.shape[0] < 2:
+        return None
+
+    gt_valid = adata_obs["ground_truth"].astype(str).to_numpy()
+    pred_valid = adata_obs["pred_cluster"].astype(str).to_numpy()
+
+    non_empty = np.array([
+        (g.strip() != "") and (g.lower() != "nan") and (p.strip() != "") and (p.lower() != "nan")
+        for g, p in zip(gt_valid, pred_valid)
+    ])
+    gt_valid = gt_valid[non_empty]
+    pred_valid = pred_valid[non_empty]
+    if gt_valid.shape[0] < 2:
+        return None
+
+    if np.unique(gt_valid).size < 2:
+        return None
+
+    return {
+        "ARI": float(adjusted_rand_score(gt_valid, pred_valid)),
+        "NMI": float(normalized_mutual_info_score(gt_valid, pred_valid)),
+        "AMI": float(adjusted_mutual_info_score(gt_valid, pred_valid)),
+        "HOM": float(homogeneity_score(gt_valid, pred_valid)),
+        "n_valid": int(gt_valid.shape[0]),
+    }
+
+
+def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, ground_truth=None):
     """
     使用 Scanpy 进行降维、聚类和绘图
     z_final: [N, C] 最终的融合特征 (Tensor or Numpy)
@@ -130,6 +162,7 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     # 无侵入式聚合度评估 (Moran's I) - 不打印终端，仅用于顶部图标题
     # ==============================================================================
     moran_title_str = ""
+    cluster_scores = None
     try:
         # 评估视角 1：连续隐特征 z_final 的平均空间自相关性
         mi_latent_avg, _ = calculate_spatial_morans_i(coords, z_final, k=6)
@@ -141,6 +174,15 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         mi_cluster_avg, _ = calculate_spatial_morans_i(coords, one_hot_clusters, k=6)
         
         moran_title_str = f" | Latent Moran's I: {mi_latent_avg:.4f} | Cluster Moran's I: {mi_cluster_avg:.4f}"
+
+        cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
+        if cluster_scores is not None:
+            moran_title_str += (
+                f" | ARI: {cluster_scores['ARI']:.4f}"
+                f" | NMI: {cluster_scores['NMI']:.4f}"
+                f" | AMI: {cluster_scores['AMI']:.4f}"
+                f" | HOM: {cluster_scores['HOM']:.4f}"
+            )
     except Exception as e:
         moran_title_str = " | Moran's I Error"
     # ==============================================================================
@@ -230,6 +272,24 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     adata.write(h5ad_path)
     print(f"✅ Embedding h5ad saved to: {h5ad_path}")
 
+    if cluster_scores is not None:
+        metrics_path = os.path.join(pred_dir, "cluster_metrics.txt")
+        with open(metrics_path, "w", encoding="utf-8") as f:
+            f.write(f"ARI\t{cluster_scores['ARI']:.6f}\n")
+            f.write(f"NMI\t{cluster_scores['NMI']:.6f}\n")
+            f.write(f"AMI\t{cluster_scores['AMI']:.6f}\n")
+            f.write(f"HOM\t{cluster_scores['HOM']:.6f}\n")
+            f.write(f"n_valid\t{cluster_scores['n_valid']}\n")
+        print(f"✅ GT clustering metrics saved to: {metrics_path}")
+        print(
+            f"   -> ARI={cluster_scores['ARI']:.4f}, "
+            f"NMI={cluster_scores['NMI']:.4f}, "
+            f"AMI={cluster_scores['AMI']:.4f}, "
+            f"HOM={cluster_scores['HOM']:.4f}"
+        )
+    else:
+        print("   ⚠️ Ground truth unavailable or invalid; skip ARI/NMI/AMI/HOM.")
+
 def main():
     print("🚀 [Phase 3] Starting Evaluation & Plotting...")
     args = parse_args()
@@ -264,6 +324,7 @@ def main():
     if evals is not None:
         evals = evals.to(device)
     atac_dim = data_dict["atac_dim"]
+    ground_truth = data_dict.get("ground_truth", None)
 
     # 3. 初始化模型
     print("\n🧠 Initializing Bio-SFINet...")
@@ -305,7 +366,8 @@ def main():
         coords, 
         save_dir, 
         resolution=args.resolution,
-        epoch_label=epoch_label
+        epoch_label=epoch_label,
+        ground_truth=ground_truth,
     )
     
     print("\n🎉 Evaluation Complete!")

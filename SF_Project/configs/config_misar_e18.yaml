@@ -39,6 +39,7 @@ data:
     tfidf_eps: 1e-6                     # TF-IDF 平滑项
     tss_window: 150000                  # TSS 上下游窗口大小 (bp)
     knn_k: 6                           # 构图的 k 近邻
+    ground_truth_key: "Combined_Clusters"  # 评估用真实标签列名（来自 h5ad.obs）
 
 # ------------------------------------------
 # 2. 模型架构参数
@@ -55,7 +56,7 @@ model:
   grid_size: 128                        # 网格大小（如有使用）
   latent_dim: 50                        # 潜变量维度（如有使用）
   sfib_dim: 128                         # SFIB 特征维度
-  sfib_ino_layers: 3                    # SFIB 中 INO 单元层数
+  sfib_ino_layers: 4                    # SFIB 中 INO 单元层数
   proj_hidden_dim: 64                   # 对比投影头隐藏维度
   proj_output_dim: 64                   # 对比投影头输出维度
   rna_dec_hidden: 512                   # RNA 解码器隐藏维度

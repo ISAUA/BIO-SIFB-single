@@ -11,6 +11,7 @@ from sf_model.preprocess.io import (
     add_spatial_info,
     read_10x_h5_multiome,
     add_spatial_info_csv,
+    read_h5ad_rna_atac,
 )
 from sf_model.preprocess.rna_process import process_rna_pipeline
 from sf_model.preprocess.atac_process import process_atac_pipeline
@@ -25,6 +26,23 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess raw spatial multi-omics data")
     parser.add_argument("--config", default="configs/config_human.yaml", help="Path to YAML config file")
     return parser.parse_args()
+
+
+def infer_ground_truth_key(obs_df, preferred_key=None):
+    if preferred_key and preferred_key in obs_df.columns:
+        return preferred_key
+
+    candidates = [
+        'ground_truth', 'groundtruth', 'gt',
+        'combined_clusters', 'combined_cluster',
+        'combined_clusters_annotation', 'cluster', 'clusters',
+        'cell_type', 'celltype', 'annotation', 'annot', 'label', 'labels',
+    ]
+    lower_to_col = {c.lower(): c for c in obs_df.columns}
+    for c in candidates:
+        if c in lower_to_col:
+            return lower_to_col[c]
+    return None
 
 def main():
     print("🚀 [Phase 1] Starting Data Preprocessing...")
@@ -50,10 +68,22 @@ def main():
     # ==========================================
     print("\n📦 Loading Raw Data...")
 
-    # 自动根据配置键选择预处理读取路径：
-    # 1) MISAR: h5_matrix + spatial_csv
-    # 2) 旧版: rna_mtx/rna_genes/rna_barcodes + atac_mtx/atac_peaks/atac_barcodes + spatial
-    if 'h5_matrix' in files and 'spatial_csv' in files:
+    # 自动根据配置键选择预处理读取路径（优先级）：
+    # 1) RNA+ATAC 双 h5ad
+    # 2) MISAR: 10x h5 + spatial csv
+    # 3) 旧版 mtx 输入
+    default_rna_h5ad = os.path.join(raw_dir, "adata_RNA.h5ad")
+    default_atac_h5ad = os.path.join(raw_dir, "adata_Peak.h5ad")
+    has_pair_h5ad = (
+        ('rna_h5ad' in files and 'atac_h5ad' in files) or
+        (os.path.exists(default_rna_h5ad) and os.path.exists(default_atac_h5ad))
+    )
+
+    if has_pair_h5ad:
+        rna_h5ad = os.path.join(raw_dir, files.get('rna_h5ad', 'adata_RNA.h5ad'))
+        atac_h5ad = os.path.join(raw_dir, files.get('atac_h5ad', 'adata_Peak.h5ad'))
+        adata_rna, adata_atac = read_h5ad_rna_atac(rna_h5ad, atac_h5ad)
+    elif 'h5_matrix' in files and 'spatial_csv' in files:
         print(f"   -> Reading RNA+ATAC from {files['h5_matrix']}...")
         adata_rna, adata_atac = read_10x_h5_multiome(
             os.path.join(raw_dir, files['h5_matrix'])
@@ -78,7 +108,7 @@ def main():
             os.path.join(raw_dir, files['atac_barcodes'])
         )
 
-    # 模态对齐：将 RNA 筛选后的细胞顺序应用到 ATAC，并同步空间坐标
+    # 模态对齐：将 RNA 细胞顺序应用到 ATAC，并同步空间坐标
     adata_atac = adata_atac[adata_rna.obs_names, :].copy()
     adata_atac.obsm['spatial'] = adata_rna.obsm['spatial'].copy()
 
@@ -136,6 +166,25 @@ def main():
         tfidf_eps=tfidf_eps,
     )
 
+    # 预处理后再做一次强制对齐：按 RNA 条码对 ATAC 取子集并重排。
+    # 这一步可兜底处理任一模态在上游发生了细胞过滤的情况。
+    if adata_rna.n_obs != adata_atac.n_obs or not np.array_equal(adata_rna.obs_names, adata_atac.obs_names):
+        common_cells = adata_rna.obs_names.intersection(adata_atac.obs_names)
+        if len(common_cells) == 0:
+            raise ValueError("❌ No overlapping cells between RNA and ATAC after preprocessing.")
+        if len(common_cells) < adata_rna.n_obs or len(common_cells) < adata_atac.n_obs:
+            print(
+                f"⚠️ Post-process alignment: RNA={adata_rna.n_obs}, ATAC={adata_atac.n_obs}, "
+                f"keeping intersection={len(common_cells)}"
+            )
+
+        adata_rna = adata_rna[common_cells, :].copy()
+        adata_atac = adata_atac[common_cells, :].copy()
+        adata_atac = adata_atac[adata_rna.obs_names, :].copy()
+        adata_atac.obsm['spatial'] = adata_rna.obsm['spatial'].copy()
+
+    print(f"   ✅ Aligned final cells: RNA={adata_rna.n_obs}, ATAC={adata_atac.n_obs}")
+
     # # ==========================================
     # # Step 4: 构建空间图 & 准备 Tensor
     # # ==========================================
@@ -162,7 +211,12 @@ def main():
     coords = adata_rna.obsm['spatial']
     # 默认：RNA 特征欧氏距离权重；若需空间距离衰减，注释下行并启用备选行
     rna_features = adata_rna.X
-    edge_index, u_basis, evals = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
+    graph_outputs = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
+    if len(graph_outputs) == 3:
+        edge_index, u_basis, evals = graph_outputs
+    else:
+        edge_index, u_basis = graph_outputs
+        evals = None
     # 备选：使用空间距离高斯衰减
     # edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
 
@@ -177,6 +231,22 @@ def main():
     atac_feat = to_tensor(adata_atac)
     coords_tensor = torch.FloatTensor(coords)
 
+    gt_key = infer_ground_truth_key(adata_rna.obs, preferred_key=params.get('ground_truth_key'))
+    ground_truth = None
+    if gt_key is not None:
+        gt_vals = adata_rna.obs[gt_key].astype(str).to_numpy()
+        valid_mask = np.array([
+            (v is not None) and (str(v).strip() != "") and (str(v).lower() != "nan")
+            for v in gt_vals
+        ])
+        if valid_mask.sum() > 0:
+            ground_truth = gt_vals
+            print(f"   ✅ Found ground truth in obs column: {gt_key}")
+        else:
+            print(f"   ⚠️ Ground truth column '{gt_key}' is empty after cleaning; skipping.")
+    else:
+        print("   ⚠️ No ground truth column found in RNA obs.")
+
     # ==========================================
     # Step 5: 保存处理好的数据
     # ==========================================
@@ -189,9 +259,15 @@ def main():
         "coords": coords_tensor,
         "edge_index": edge_index,
         "u_basis": u_basis,
-        "evals": evals,
         "atac_dim": atac_feat.shape[1] # 记录动态 ATAC 维度
     }
+
+    if evals is not None:
+        data_dict["evals"] = evals
+
+    if ground_truth is not None:
+        data_dict["ground_truth"] = ground_truth
+        data_dict["ground_truth_key"] = gt_key
     
     torch.save(data_dict, save_path)
     print("✅ Preprocessing Complete!")

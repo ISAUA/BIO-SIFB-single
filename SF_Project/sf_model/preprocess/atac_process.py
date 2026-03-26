@@ -269,22 +269,20 @@ def process_atac_pipeline(
     # 4. TF-IDF
     adata = custom_tf_idf(adata, eps=tfidf_eps)
     
-    # 5. 手工 Normalize + Log1p，避免 normalize_total dtype 兼容问题
+    # 5. 使用 Scanpy 进行 Normalize + Log1p
     if adata.shape[1] > 0:
         if sparse.issparse(adata.X):
             adata.X.data[np.isinf(adata.X.data)] = 0.0
             adata.X.data[np.isnan(adata.X.data)] = 0.0
-            X = adata.X.toarray().astype(np.float32)
+            adata.X = adata.X.tocsr().astype(np.float32)
         else:
             X = np.array(adata.X, dtype=np.float32)
             X[np.isinf(X)] = 0.0
             X[np.isnan(X)] = 0.0
+            adata.X = X
 
-        sums = X.sum(axis=1, keepdims=True)
-        sums[sums == 0] = 1.0
-        X = (X / sums) * float(target_sum)
-        X = np.log1p(X)
-        adata.X = X
+        sc.pp.normalize_total(adata, target_sum=float(target_sum))
+        sc.pp.log1p(adata)
     
     print(f"Final ATAC shape: {adata.shape}")
     return adata, gene_peak_mask

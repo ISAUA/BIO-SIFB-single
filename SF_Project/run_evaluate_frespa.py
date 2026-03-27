@@ -1,8 +1,14 @@
 import os
 import argparse
 import re
+import warnings
 import torch
 import yaml
+
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
+warnings.filterwarnings("ignore", message="nopython is set for njit and is ignored", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*TBB threading layer.*")
+
 import scanpy as sc
 import matplotlib.pyplot as plt
 from sf_model.utils import set_seed
@@ -20,6 +26,13 @@ def parse_args():
     parser.add_argument("--checkpoint", default=None, help="Checkpoint key or filename; defaults to config eval.checkpoint")
     parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
     return parser.parse_args()
+
+
+def torch_load_compat(path, map_location, weights_only):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=weights_only)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
 
 
 def infer_epoch_label(ckpt_name: str) -> str:
@@ -56,7 +69,9 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
     except Exception:
         sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
 
-    vivid_palette = plt.get_cmap("tab10").colors  # 高对比离散色
+    n_clusters = int(adata.obs["cluster"].nunique())
+    cmap = plt.get_cmap("tab20")
+    vivid_palette = [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
     sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
 
@@ -128,7 +143,7 @@ def main():
         return
 
     print(f"📦 Loading data from {data_path} ...")
-    data_dict = torch.load(data_path, map_location="cpu")
+    data_dict = torch_load_compat(data_path, map_location="cpu", weights_only=False)
     rna_feat = data_dict["rna_feat"].to(device)
     atac_feat = data_dict["atac_feat"].to(device)
     coords = data_dict["coords"].to(device)
@@ -137,9 +152,11 @@ def main():
     evals = data_dict.get("evals", None)
     if evals is not None:
         evals = evals.to(device)
+    rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
     atac_dim = data_dict["atac_dim"]
 
     print("🧠 Initializing BioSFINet ...")
+    config["model"]["rna_in_dim"] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
 
     eval_cfg = config.get("eval", {})
@@ -153,7 +170,7 @@ def main():
         return
 
     print(f"   -> Loading weights from {ckpt_path}")
-    state_dict = torch.load(ckpt_path, map_location=device)
+    state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
     epoch_label = infer_epoch_label(ckpt_name)

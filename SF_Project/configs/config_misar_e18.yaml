@@ -30,10 +30,12 @@ data:
 
   parameters:                           # 预处理超参数
     n_top_genes: 3000                   # RNA 高变基因数量
+    rna_pca_dim: 512                    # RNA 入模前 PCA 维度
     rna_min_cells: 3                    # 基因至少出现在多少细胞中
     rna_target_sum: 1e4                 # RNA 归一化目标总和
     n_global_peaks: 50000               # ATAC 初筛峰数量
     n_final_peaks: 30000                # ATAC 最终保留峰数量
+    atac_pca_dim: 512                   # ATAC 入模前降维维度（稀疏输入使用 TruncatedSVD）
     atac_min_cells: 50                  # 峰至少出现在多少细胞中
     atac_target_sum: 1e4                # ATAC 归一化目标总和
     tfidf_eps: 1e-6                     # TF-IDF 平滑项
@@ -56,7 +58,7 @@ model:
   grid_size: 128                        # 网格大小（如有使用）
   latent_dim: 50                        # 潜变量维度（如有使用）
   sfib_dim: 128                         # SFIB 特征维度
-  sfib_ino_layers: 4                    # SFIB 中 INO 单元层数
+  sfib_ino_layers: 2                    # SFIB 中 INO 单元层数
   proj_hidden_dim: 64                   # 对比投影头隐藏维度
   proj_output_dim: 64                   # 对比投影头输出维度
   rna_dec_hidden: 512                   # RNA 解码器隐藏维度
@@ -71,17 +73,17 @@ model:
 # 3. 训练策略参数
 # ------------------------------------------
 train:
-  epochs: 1600                          # 训练轮数
+  epochs: 3000                          # 训练轮数
   batch_size: 1                         # 批大小（当前实现按全量）
   learning_rate: 1e-3                   # 学习率（前 1000 轮）
   learning_rate_low: 1e-4               # 学习率（后 600 轮）
-  lr_switch_epoch: 1000                  # 学习率切换轮次
+  lr_switch_epoch: 2000                  # 学习率切换轮次
   weight_decay: 1e-4                    # 权重衰减
   lambda_rna: 5.0                       # RNA 重构损失权重
   lambda_atac: 1.0                      # ATAC 重构损失权重
   lambda_clip: 0.5                      # 对比损失权重
-  fade_start_epoch: 800                 # CLIP 权重退火起始轮次
-  fade_end_epoch: 1200                  # CLIP 权重退火结束轮次
+  fade_start_epoch: 2000                 # CLIP 权重退火起始轮次
+  fade_end_epoch: 2500                  # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                  # RNA 重构正样本权重
   pos_weight_atac: 20.0                 # ATAC 重构正样本权重
   clip_temperature: 0.5                 # 对比损失温度

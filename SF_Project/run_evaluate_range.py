@@ -1,6 +1,12 @@
 import argparse
 import os
 import re
+import logging
+import warnings
+
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
+warnings.filterwarnings("ignore", message="nopython is set for njit and is ignored", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*TBB threading layer.*")
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -33,6 +39,35 @@ def parse_args():
     parser.add_argument("--best-epoch", type=int, default=2000, help="Use best checkpoint when epoch equals this value")
     parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
     return parser.parse_args()
+
+
+def resolve_train_log_path(save_dir):
+    save_dir = save_dir.rstrip('/\\')
+    if os.path.basename(save_dir) == 'checkpoints':
+        return os.path.join(os.path.dirname(save_dir), "train.log")
+    return os.path.join(save_dir, "train.log")
+
+
+def setup_logger(log_path):
+    logger = logging.getLogger("SFEvaluateRange")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.handlers.clear()
+
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+def torch_load_compat(path, map_location, weights_only):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=weights_only)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
 
 
 def calculate_spatial_morans_i(coords, features, k=6):
@@ -119,7 +154,7 @@ def infer_epoch_label(ckpt_name, epoch):
     return f"Epoch {epoch}"
 
 
-def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, output_suffix=None, ground_truth=None):
+def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, output_suffix=None, ground_truth=None, logger=None):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
     if isinstance(coords, torch.Tensor):
@@ -167,7 +202,9 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     except Exception:
         moran_title_str = " | Moran's I Error"
 
-    vivid_palette = plt.get_cmap("tab10").colors
+    n_clusters = int(adata.obs["cluster"].nunique())
+    cmap = plt.get_cmap("tab20")
+    vivid_palette = [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
     sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
 
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
@@ -230,22 +267,19 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     adata.write(h5ad_path)
 
     if cluster_scores is not None:
-        metrics_path = os.path.join(pred_dir, f"cluster_metrics_{suffix}.txt")
-        with open(metrics_path, "w", encoding="utf-8") as f:
-            f.write(f"ARI\t{cluster_scores['ARI']:.6f}\n")
-            f.write(f"NMI\t{cluster_scores['NMI']:.6f}\n")
-            f.write(f"AMI\t{cluster_scores['AMI']:.6f}\n")
-            f.write(f"HOM\t{cluster_scores['HOM']:.6f}\n")
-            f.write(f"n_valid\t{cluster_scores['n_valid']}\n")
-        print(f"✅ GT clustering metrics saved to: {metrics_path}")
-        print(
-            f"   -> ARI={cluster_scores['ARI']:.4f}, "
-            f"NMI={cluster_scores['NMI']:.4f}, "
-            f"AMI={cluster_scores['AMI']:.4f}, "
-            f"HOM={cluster_scores['HOM']:.4f}"
-        )
+        if logger is not None:
+            logger.info(
+                "GT metrics (%s) | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
+                suffix,
+                cluster_scores['ARI'],
+                cluster_scores['NMI'],
+                cluster_scores['AMI'],
+                cluster_scores['HOM'],
+                cluster_scores['n_valid'],
+            )
     else:
-        print("   ⚠️ Ground truth unavailable or invalid; skip ARI/NMI/AMI/HOM.")
+        if logger is not None:
+            logger.warning("Ground truth unavailable or invalid for %s; skip ARI/NMI/AMI/HOM.", suffix)
 
     return plot_path, h5ad_path
 
@@ -267,13 +301,10 @@ def build_epoch_list(start, end, step):
 
 def main():
     args = parse_args()
-    print("🚀 [Range Evaluate] Starting checkpoint-range evaluation...")
 
     epochs = build_epoch_list(args.start, args.end, args.step)
-    print(f"   Target epochs: {epochs}")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"   Using device: {device}")
 
     config = load_config(args.config)
     set_seed(config["project"].get("seed", 42))
@@ -281,15 +312,19 @@ def main():
     processed_dir = config["data"]["processed_path"]
     save_dir = config["project"]["save_dir"]
     eval_cfg = config.get("eval", {})
+    log_path = resolve_train_log_path(save_dir)
+    logger = setup_logger(log_path)
+
+    logger.info("[Range Evaluate] Started. epochs=%s", epochs)
 
     data_path = os.path.join(processed_dir, "processed_data.pt")
     if not os.path.exists(data_path):
-        print(f"❌ Error: Data not found at {data_path}")
-        print("   -> Please run 'python run_preprocess.py' first.")
+        logger.error("Data not found at %s", data_path)
+        logger.error("Please run 'python run_preprocess.py' first.")
         return
 
-    print(f"\n📦 Loading data from {data_path}...")
-    data_dict = torch.load(data_path, map_location="cpu")
+    logger.info("Loading processed data...")
+    data_dict = torch_load_compat(data_path, map_location="cpu", weights_only=False)
 
     rna_feat = data_dict["rna_feat"].to(device)
     atac_feat = data_dict["atac_feat"].to(device)
@@ -299,10 +334,12 @@ def main():
     evals = data_dict.get("evals", None)
     if evals is not None:
         evals = evals.to(device)
+    rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
     atac_dim = data_dict["atac_dim"]
     ground_truth = data_dict.get("ground_truth", None)
 
-    print("\n🧠 Initializing Bio-SFINet...")
+    logger.info("Initializing Bio-SFINet...")
+    config["model"]["rna_in_dim"] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
     model.eval()
 
@@ -313,13 +350,13 @@ def main():
         ckpt_name = resolve_checkpoint_name(eval_cfg, epoch, args.best_epoch)
         ckpt_path = os.path.join(save_dir, ckpt_name)
 
-        print(f"\n===== Evaluating epoch {epoch} with {ckpt_name} =====")
+        logger.info("Evaluating epoch %d with %s", epoch, ckpt_name)
         if not os.path.exists(ckpt_path):
-            print(f"⚠️ Skip: checkpoint not found at {ckpt_path}")
+            logger.warning("Skip: checkpoint not found at %s", ckpt_path)
             failed += 1
             continue
 
-        state_dict = torch.load(ckpt_path, map_location=device)
+        state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
         model.load_state_dict(state_dict, strict=False)
 
         with torch.no_grad():
@@ -339,14 +376,13 @@ def main():
             epoch_label=epoch_label,
             output_suffix=suffix,
             ground_truth=ground_truth,
+            logger=logger,
         )
 
-        print(f"✅ Saved figure: {plot_path}")
-        print(f"✅ Saved h5ad: {h5ad_path}")
+        logger.info("Artifacts (%s): %s | %s", suffix, plot_path, h5ad_path)
         success += 1
 
-    print("\n🎉 Range evaluation complete!")
-    print(f"   Success: {success} | Failed/Skipped: {failed}")
+    logger.info("Range evaluation complete. Success=%d | Failed/Skipped=%d", success, failed)
 
 
 if __name__ == "__main__":

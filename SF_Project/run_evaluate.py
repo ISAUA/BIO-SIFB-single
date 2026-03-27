@@ -1,9 +1,16 @@
 import os
 import argparse
 import re
+import logging
+import warnings
 import torch
 import yaml
 import numpy as np
+
+warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
+warnings.filterwarnings("ignore", message="nopython is set for njit and is ignored", category=RuntimeWarning)
+warnings.filterwarnings("ignore", message=".*TBB threading layer.*")
+
 import scanpy as sc
 import squidpy as sq
 import matplotlib.pyplot as plt
@@ -29,6 +36,35 @@ def parse_args():
     parser.add_argument("--checkpoint", default=None, help="Checkpoint key or filename; defaults to config eval.checkpoint")
     parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
     return parser.parse_args()
+
+
+def resolve_train_log_path(save_dir):
+    save_dir = save_dir.rstrip('/\\')
+    if os.path.basename(save_dir) == 'checkpoints':
+        return os.path.join(os.path.dirname(save_dir), "train.log")
+    return os.path.join(save_dir, "train.log")
+
+
+def setup_logger(log_path):
+    logger = logging.getLogger("SFEvaluate")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.handlers.clear()
+
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    handler = logging.FileHandler(log_path, mode='a', encoding='utf-8')
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter('%(asctime)s | %(levelname)s | %(name)s | %(message)s')
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+def torch_load_compat(path, map_location, weights_only):
+    try:
+        return torch.load(path, map_location=map_location, weights_only=weights_only)
+    except TypeError:
+        return torch.load(path, map_location=map_location)
 
 def infer_epoch_label(ckpt_name, total_epochs=None):
     """
@@ -119,14 +155,12 @@ def calculate_clustering_scores(cluster_labels, ground_truth):
     }
 
 
-def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, ground_truth=None):
+def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, ground_truth=None, logger=None):
     """
     使用 Scanpy 进行降维、聚类和绘图
     z_final: [N, C] 最终的融合特征 (Tensor or Numpy)
     coords: [N, 2] 空间坐标
     """
-    print(f"\n🎨 Starting Visualization (Leiden Res={resolution})...")
-    
     # 确保转为 numpy
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
@@ -138,13 +172,10 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     adata.obsm['spatial'] = coords
     
     # 2. 基础分析流程 (Neighbors -> UMAP -> Leiden)
-    print("   -> Computing Neighbors...")
     sc.pp.neighbors(adata, use_rep='X')
-    
-    print("   -> Computing UMAP...")
+
     sc.tl.umap(adata)
-    
-    print(f"   -> Clustering (Leiden)...")
+
     try:
         sc.tl.leiden(
             adata,
@@ -155,7 +186,8 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
             directed=False,
         )
     except Exception as e:
-        print("   ⚠️ Leiden clustering failed (maybe install leidenalg?), falling back to louvain.")
+        if logger is not None:
+            logger.warning("Leiden clustering failed, falling back to louvain.")
         sc.tl.louvain(adata, resolution=resolution, key_added='cluster')
         
     # ==============================================================================
@@ -190,10 +222,11 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     # 3. 绘图 (UMAP + Spatial)
     # 设置绘图风格
     # 统一高对比色与画布参数
-    vivid_palette = plt.get_cmap("tab10").colors  # 高对比离散色
+    n_clusters = int(adata.obs['cluster'].nunique())
+    cmap = plt.get_cmap("tab20")
+    vivid_palette = [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
     sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
     
-    print("   -> Plotting...")
     fig, axs = plt.subplots(1, 2, figsize=(14, 6))
     
     # 左图: UMAP (已按要求修改标题)
@@ -263,56 +296,55 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     plt.savefig(plot_path, dpi=300)
     plt.close()
     
-    print(f"✅ Plots saved to: {plot_path}")
-    
     # 5. 保存结果 h5ad (方便后续自定义分析)
     pred_dir = os.path.join(os.path.dirname(fig_dir), "predictions")
     os.makedirs(pred_dir, exist_ok=True)
     h5ad_path = os.path.join(pred_dir, "embedding_joint.h5ad")
     adata.write(h5ad_path)
-    print(f"✅ Embedding h5ad saved to: {h5ad_path}")
+    if logger is not None:
+        logger.info("Artifacts: %s | %s", plot_path, h5ad_path)
 
     if cluster_scores is not None:
-        metrics_path = os.path.join(pred_dir, "cluster_metrics.txt")
-        with open(metrics_path, "w", encoding="utf-8") as f:
-            f.write(f"ARI\t{cluster_scores['ARI']:.6f}\n")
-            f.write(f"NMI\t{cluster_scores['NMI']:.6f}\n")
-            f.write(f"AMI\t{cluster_scores['AMI']:.6f}\n")
-            f.write(f"HOM\t{cluster_scores['HOM']:.6f}\n")
-            f.write(f"n_valid\t{cluster_scores['n_valid']}\n")
-        print(f"✅ GT clustering metrics saved to: {metrics_path}")
-        print(
-            f"   -> ARI={cluster_scores['ARI']:.4f}, "
-            f"NMI={cluster_scores['NMI']:.4f}, "
-            f"AMI={cluster_scores['AMI']:.4f}, "
-            f"HOM={cluster_scores['HOM']:.4f}"
-        )
+        if logger is not None:
+            logger.info(
+                "GT metrics | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
+                cluster_scores['ARI'],
+                cluster_scores['NMI'],
+                cluster_scores['AMI'],
+                cluster_scores['HOM'],
+                cluster_scores['n_valid'],
+            )
     else:
-        print("   ⚠️ Ground truth unavailable or invalid; skip ARI/NMI/AMI/HOM.")
+        if logger is not None:
+            logger.warning("Ground truth unavailable or invalid; skip ARI/NMI/AMI/HOM.")
+
+    return plot_path, h5ad_path
 
 def main():
-    print("🚀 [Phase 3] Starting Evaluation & Plotting...")
     args = parse_args()
-    
+
     # 设置设备
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"   Using device: {device}")
 
     # 1. 加载配置
     config = load_config(args.config)
     set_seed(config['project'].get('seed', 42))
     processed_dir = config['data']['processed_path']
     save_dir = config['project']['save_dir']
+    log_path = resolve_train_log_path(save_dir)
+    logger = setup_logger(log_path)
+
+    logger.info("[Phase 3] Evaluation started.")
     
     # 2. 加载数据 (直接读预处理好的 Tensor)
     data_path = os.path.join(processed_dir, "processed_data.pt")
     if not os.path.exists(data_path):
-        print(f"❌ Error: Data not found at {data_path}")
-        print("   -> Please run 'python run_preprocess.py' first.")
+        logger.error("Data not found at %s", data_path)
+        logger.error("Please run 'python run_preprocess.py' first.")
         return
 
-    print(f"\n📦 Loading data from {data_path}...")
-    data_dict = torch.load(data_path, map_location='cpu')
+    logger.info("Loading processed data...")
+    data_dict = torch_load_compat(data_path, map_location='cpu', weights_only=False)
     
     # 提取 Tensor 并转到 GPU
     rna_feat = data_dict["rna_feat"].to(device)
@@ -323,11 +355,13 @@ def main():
     evals = data_dict.get("evals", None)
     if evals is not None:
         evals = evals.to(device)
+    rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
     atac_dim = data_dict["atac_dim"]
     ground_truth = data_dict.get("ground_truth", None)
 
     # 3. 初始化模型
-    print("\n🧠 Initializing Bio-SFINet...")
+    logger.info("Initializing model...")
+    config['model']['rna_in_dim'] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
     
     # 4. 加载权重
@@ -339,38 +373,43 @@ def main():
     ckpt_path = os.path.join(save_dir, ckpt_name)
     
     if not os.path.exists(ckpt_path):
-        print(f"❌ Error: Checkpoint not found at {ckpt_path}")
-        print("   -> Please train the model first using 'run_train.py'")
+        logger.error("Checkpoint not found at %s", ckpt_path)
+        logger.error("Please train the model first using 'run_train.py'")
         return
-        
-    print(f"   -> Loading weights from {ckpt_path}...")
+
+    logger.info("Loading checkpoint: %s", ckpt_name)
     # 加载参数 (处理可能的 key 不匹配问题)
-    state_dict = torch.load(ckpt_path, map_location=device)
+    state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
     model.eval()
     total_epochs = config.get('train', {}).get('epochs')
     epoch_label = infer_epoch_label(ckpt_name, total_epochs=total_epochs)
     
     # 5. 推理 (Inference)
-    print("\n🔮 Running Inference...")
+    logger.info("Inference running...")
     with torch.no_grad():
         # Forward pass (single fused tower)
         outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals)
         z_final = outputs[0]
-        
-    print(f"   -> Extracted Latent Shape: {z_final.shape}")
+
+    logger.info("Latent shape: %s", z_final.shape)
     
     # 6. 可视化
-    visualize_and_save(
+    plot_path, h5ad_path = visualize_and_save(
         z_final, 
         coords, 
         save_dir, 
         resolution=args.resolution,
         epoch_label=epoch_label,
         ground_truth=ground_truth,
+        logger=logger,
     )
-    
-    print("\n🎉 Evaluation Complete!")
+
+    logger.info("Evaluation complete.")
+    print("\n✅ Evaluation complete")
+    print(f"   Figure: {plot_path}")
+    print(f"   Embedding: {h5ad_path}")
+    print(f"   Log: {log_path}")
 
 if __name__ == "__main__":
     main()

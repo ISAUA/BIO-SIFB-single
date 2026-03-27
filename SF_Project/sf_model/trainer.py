@@ -5,6 +5,7 @@ import torch.nn.functional as F
 import os
 import logging
 import math
+from tqdm.auto import trange
 from .utils import CLIPLoss
 
 # 1. 加权 MSE Loss 类 (保持不变)
@@ -134,7 +135,9 @@ class SFTrainer:
         epochs = self.epochs
         best_loss = float('inf')
 
-        for epoch in range(1, epochs + 1):
+        self.logger.info("Training started: epochs=%d", epochs)
+        progress = trange(1, epochs + 1, desc="Training", unit="epoch", dynamic_ncols=True)
+        for epoch in progress:
             metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, evals, epoch)
 
             # 更新学习率调度
@@ -145,14 +148,31 @@ class SFTrainer:
                 best_loss = metrics['total']
                 torch.save(self.model.state_dict(), self.best_path)
 
+            progress.set_postfix(
+                total=f"{metrics['total']:.4f}",
+                rec_rna=f"{metrics['rec_rna']:.4f}",
+                rec_atac=f"{metrics['rec_atac']:.4f}",
+                clip=f"{metrics['clip']:.4f}",
+                w_clip=f"{metrics['clip_weight']:.3f}",
+                best=f"{best_loss:.4f}",
+                lr=f"{current_lr:.2e}",
+            )
+
             if epoch % self.log_interval == 0:
-                best_display = f"{best_loss:.4f}" if best_loss < float('inf') else "N/A"
-                print(
-                    f"Epoch {epoch:03d} | total {metrics['total']:.4f} | "
-                    f"rec_rna {metrics['rec_rna']:.4f} | rec_atac {metrics['rec_atac']:.4f} | "
-                    f"clip {metrics['clip']:.4f} | clip_weight {metrics['clip_weight']:.4f} | "
-                    f"lr {current_lr:.2e} | best {best_display}"
+                self.logger.info(
+                    "Epoch %03d | total %.4f | rec_rna %.4f | rec_atac %.4f | clip %.4f | clip_weight %.4f | lr %.2e | best %.4f",
+                    epoch,
+                    metrics['total'],
+                    metrics['rec_rna'],
+                    metrics['rec_atac'],
+                    metrics['clip'],
+                    metrics['clip_weight'],
+                    current_lr,
+                    best_loss,
                 )
 
             if epoch % self.save_every == 0:
-                torch.save(self.model.state_dict(), os.path.join(self.save_dir, f"ckpt_{epoch}.pth"))
+                ckpt_path = os.path.join(self.save_dir, f"ckpt_{epoch}.pth")
+                torch.save(self.model.state_dict(), ckpt_path)
+
+        self.logger.info("Training finished. Best loss=%.4f", best_loss)

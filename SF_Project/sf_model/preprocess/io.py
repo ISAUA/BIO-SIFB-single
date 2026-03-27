@@ -4,6 +4,7 @@ from scipy import io, sparse
 import numpy as np
 import os
 import scanpy as sc
+import warnings
 
 
 def _ensure_spatial_from_obs(adata):
@@ -38,9 +39,21 @@ def read_h5ad_rna_atac(rna_h5ad_path, atac_h5ad_path):
     优先使用 RNA 的空间坐标；若 RNA 无空间坐标则回退到 ATAC。
     """
     print(f"Reading RNA h5ad from: {rna_h5ad_path}")
-    adata_rna = sc.read_h5ad(rna_h5ad_path)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique. To make them unique, call `.var_names_make_unique`.",
+            category=UserWarning,
+        )
+        adata_rna = sc.read_h5ad(rna_h5ad_path)
     print(f"Reading ATAC h5ad from: {atac_h5ad_path}")
-    adata_atac = sc.read_h5ad(atac_h5ad_path)
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Variable names are not unique. To make them unique, call `.var_names_make_unique`.",
+            category=UserWarning,
+        )
+        adata_atac = sc.read_h5ad(atac_h5ad_path)
 
     adata_rna.obs_names = adata_rna.obs_names.astype(str)
     adata_atac.obs_names = adata_atac.obs_names.astype(str)

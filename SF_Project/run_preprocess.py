@@ -101,6 +101,11 @@ def setup_logger(log_path):
     logger.addHandler(handler)
     return logger
 
+
+def append_log_separator(log_path):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 88 + "\n")
+
 def main():
     print("🚀 [Phase 1] Starting Data Preprocessing...")
     args = parse_args()
@@ -348,6 +353,8 @@ def main():
     torch.save(data_dict, save_path)
     print("✅ Preprocessing Complete!")
     logger.info("Preprocessing complete: %s", save_path)
+    if os.environ.get("SF_PIPELINE_RUN") != "1":
+        append_log_separator(log_path)
 
 if __name__ == "__main__":
     main()

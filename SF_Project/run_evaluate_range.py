@@ -1,25 +1,29 @@
 import argparse
+import logging
 import os
 import re
-import logging
+import sys
 import warnings
 
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
 warnings.filterwarnings("ignore", message="nopython is set for njit and is ignored", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message=".*TBB threading layer.*")
+warnings.filterwarnings("ignore", message="In the future, the default backend for leiden will be igraph instead of leidenalg.*", category=FutureWarning)
 
 import matplotlib.pyplot as plt
 import numpy as np
+import pandas as pd
 import scanpy as sc
 import squidpy as sq
 import torch
 import yaml
 from sklearn.metrics import (
-    adjusted_rand_score,
-    normalized_mutual_info_score,
     adjusted_mutual_info_score,
+    adjusted_rand_score,
     homogeneity_score,
+    normalized_mutual_info_score,
 )
+from sklearn.decomposition import PCA
 
 from sf_model.model.bio_sfinet import BioSFINet
 from sf_model.utils import set_seed
@@ -37,7 +41,7 @@ def parse_args():
     parser.add_argument("--end", type=int, default=2000, help="End epoch (inclusive)")
     parser.add_argument("--step", type=int, default=100, help="Epoch step")
     parser.add_argument("--best-epoch", type=int, default=2000, help="Use best checkpoint when epoch equals this value")
-    parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
+    parser.add_argument("--n-clusters", type=int, default=None, help="Number of clusters for mclust (override config)")
     return parser.parse_args()
 
 
@@ -63,6 +67,11 @@ def setup_logger(log_path):
     return logger
 
 
+def append_log_separator(log_path):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 88 + "\n")
+
+
 def torch_load_compat(path, map_location, weights_only):
     try:
         return torch.load(path, map_location=map_location, weights_only=weights_only)
@@ -70,10 +79,37 @@ def torch_load_compat(path, map_location, weights_only):
         return torch.load(path, map_location=map_location)
 
 
+def ensure_r_runtime_available():
+    """Ensure rpy2 can locate the R runtime in conda environments."""
+    py_bin = os.path.dirname(sys.executable)
+    r_bin = os.path.join(py_bin, "R")
+    r_home = os.path.abspath(os.path.join(py_bin, "..", "lib", "R"))
+
+    if os.path.exists(r_home) and not os.environ.get("R_HOME"):
+        os.environ["R_HOME"] = r_home
+
+    if os.path.exists(r_bin):
+        current_path = os.environ.get("PATH", "")
+        if py_bin not in current_path.split(":"):
+            os.environ["PATH"] = f"{py_bin}:{current_path}" if current_path else py_bin
+
+
+def extract_mclust_labels(res):
+    """Robustly extract mclust classification labels from rpy2 result object."""
+    try:
+        labels = np.array(res.rx2("classification"))
+        if labels.size > 0:
+            return labels
+    except Exception:
+        pass
+
+    labels = np.array(res[-2])
+    if labels.size == 0:
+        raise ValueError("mclust classification is empty.")
+    return labels
+
+
 def calculate_spatial_morans_i(coords, features, k=6):
-    """
-    基于 squidpy 计算 Moran's I。
-    """
     coords = np.asarray(coords, dtype=np.float32)
     features = np.asarray(features, dtype=np.float32)
     if features.ndim == 1:
@@ -154,38 +190,69 @@ def infer_epoch_label(ckpt_name, epoch):
     return f"Epoch {epoch}"
 
 
-def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=None, output_suffix=None, ground_truth=None, logger=None):
+def visualize_and_save(
+    z_final,
+    coords,
+    save_dir,
+    n_clusters=7,
+    mclust_pca_dim=20,
+    epoch_label=None,
+    output_suffix=None,
+    ground_truth=None,
+    logger=None,
+    moran_k=6,
+    plot_cfg=None,
+):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
     if isinstance(coords, torch.Tensor):
         coords = coords.cpu().numpy()
 
     adata = sc.AnnData(X=z_final)
-    adata.obsm["spatial"] = coords
+    coords_plot = coords.copy()
+    coords_plot[:, 1] = -1.0 * coords_plot[:, 1]
+    adata.obsm["spatial"] = coords_plot
 
     sc.pp.neighbors(adata, use_rep="X")
     sc.tl.umap(adata)
 
     try:
-        sc.tl.leiden(
-            adata,
-            resolution=resolution,
-            key_added="cluster",
-            flavor="igraph",
-            n_iterations=2,
-            directed=False,
-        )
-    except Exception:
-        sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
+        ensure_r_runtime_available()
+        import rpy2.robjects as robjects
+        import rpy2.robjects.numpy2ri
+
+        rpy2.robjects.numpy2ri.activate()
+        robjects.r["set.seed"](42)
+        robjects.r('suppressPackageStartupMessages(library(mclust))')
+        rmclust = robjects.r["Mclust"]
+
+        # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
+        pca_target_dim = max(1, int(mclust_pca_dim))
+        pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
+        pca_model = PCA(n_components=pca_dim, random_state=42)
+        z_pca = pca_model.fit_transform(z_final)
+
+        res = rmclust(rpy2.robjects.numpy2ri.numpy2rpy(z_pca), int(n_clusters), "EEE")
+        mclust_res = extract_mclust_labels(res)
+        adata.obs["cluster"] = mclust_res
+    except Exception as e:
+        if logger is not None:
+            logger.warning("mclust failed (%s), falling back to Leiden.", str(e))
+        sc.tl.leiden(adata, resolution=1.0, key_added="cluster")
+        adata.obs["cluster"] = adata.obs["cluster"].astype(int) + 1
+
+    adata.obs["cluster"] = adata.obs["cluster"].astype(int).astype(str).astype("category")
+    cluster_list = sorted(adata.obs["cluster"].unique(), key=lambda x: int(x))
+    adata.obs["cluster"] = pd.Categorical(adata.obs["cluster"], categories=cluster_list, ordered=True)
 
     moran_title_str = ""
     cluster_scores = None
     try:
-        mi_latent_avg, _ = calculate_spatial_morans_i(coords, z_final, k=6)
+        mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
         cluster_labels = adata.obs["cluster"].values.astype(int)
         num_clusters = np.max(cluster_labels) + 1
         one_hot_clusters = np.eye(num_clusters)[cluster_labels]
-        mi_cluster_avg, _ = calculate_spatial_morans_i(coords, one_hot_clusters, k=6)
+        mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
         moran_title_str = (
             f" | Latent Moran's I: {mi_latent_avg:.4f}"
             f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
@@ -202,12 +269,17 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
     except Exception:
         moran_title_str = " | Moran's I Error"
 
-    n_clusters = int(adata.obs["cluster"].nunique())
-    cmap = plt.get_cmap("tab20")
-    vivid_palette = [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
-    sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
+    plot_cfg = plot_cfg or {}
+    panel_size = plot_cfg.get("panel_size", [6, 6])
+    fig_size = plot_cfg.get("figure_size", [14, 6])
+    dpi = int(plot_cfg.get("figure_dpi", 180))
+    umap_size = float(plot_cfg.get("umap_point_size", 60))
+    spatial_size = float(plot_cfg.get("spatial_point_size", 80))
+    alpha = float(plot_cfg.get("alpha", 1.0))
+    legend_loc = plot_cfg.get("legend_loc", "on data")
 
-    fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+    sc.set_figure_params(dpi=dpi, figsize=tuple(panel_size), frameon=True)
+    fig, axs = plt.subplots(1, 2, figsize=tuple(fig_size))
 
     sc.pl.umap(
         adata,
@@ -215,11 +287,10 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         ax=axs[0],
         show=False,
         title="UMAP",
-        legend_loc="on data",
+        legend_loc=legend_loc,
         frameon=True,
-        size=60,
-        palette=vivid_palette,
-        alpha=1.0,
+        size=umap_size,
+        alpha=alpha,
         edges=False,
     )
 
@@ -230,10 +301,9 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         ax=axs[1],
         show=False,
         title="Spatial Map",
-        size=80,
+        size=spatial_size,
         frameon=True,
-        palette=vivid_palette,
-        alpha=1.0,
+        alpha=alpha,
         edges=False,
     )
 
@@ -250,7 +320,6 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
         fig_dir = os.path.join(save_dir, "figures")
 
     os.makedirs(fig_dir, exist_ok=True)
-
     suffix = output_suffix or "default"
     plot_path = os.path.join(fig_dir, f"spatial_analysis_{suffix}.pdf")
 
@@ -271,11 +340,11 @@ def visualize_and_save(z_final, coords, save_dir, resolution=0.5, epoch_label=No
             logger.info(
                 "GT metrics (%s) | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
                 suffix,
-                cluster_scores['ARI'],
-                cluster_scores['NMI'],
-                cluster_scores['AMI'],
-                cluster_scores['HOM'],
-                cluster_scores['n_valid'],
+                cluster_scores["ARI"],
+                cluster_scores["NMI"],
+                cluster_scores["AMI"],
+                cluster_scores["HOM"],
+                cluster_scores["n_valid"],
             )
     else:
         if logger is not None:
@@ -303,7 +372,6 @@ def main():
     args = parse_args()
 
     epochs = build_epoch_list(args.start, args.end, args.step)
-
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     config = load_config(args.config)
@@ -317,10 +385,17 @@ def main():
 
     logger.info("[Range Evaluate] Started. epochs=%s", epochs)
 
+    n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get("n_clusters", 7))
+    mclust_pca_dim = int(eval_cfg.get("mclust_pca_dim", 20))
+    moran_k = int(eval_cfg.get("moran_k", 6))
+    plot_cfg = eval_cfg.get("plotting", {})
+
     data_path = os.path.join(processed_dir, "processed_data.pt")
     if not os.path.exists(data_path):
         logger.error("Data not found at %s", data_path)
         logger.error("Please run 'python run_preprocess.py' first.")
+        if os.environ.get("SF_PIPELINE_RUN") != "1":
+            append_log_separator(log_path)
         return
 
     logger.info("Loading processed data...")
@@ -338,7 +413,7 @@ def main():
     atac_dim = data_dict["atac_dim"]
     ground_truth = data_dict.get("ground_truth", None)
 
-    logger.info("Initializing Bio-SFINet...")
+    logger.info("Initializing model...")
     config["model"]["rna_in_dim"] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
     model.eval()
@@ -372,17 +447,26 @@ def main():
             z_final,
             coords,
             save_dir,
-            resolution=args.resolution,
+            n_clusters=n_clusters,
+            mclust_pca_dim=mclust_pca_dim,
             epoch_label=epoch_label,
             output_suffix=suffix,
             ground_truth=ground_truth,
             logger=logger,
+            moran_k=moran_k,
+            plot_cfg=plot_cfg,
         )
 
         logger.info("Artifacts (%s): %s | %s", suffix, plot_path, h5ad_path)
         success += 1
 
     logger.info("Range evaluation complete. Success=%d | Failed/Skipped=%d", success, failed)
+    print("\n✅ Range evaluation complete")
+    print(f"   Success: {success} | Failed/Skipped: {failed}")
+    print(f"   Log: {log_path}")
+
+    if os.environ.get("SF_PIPELINE_RUN") != "1":
+        append_log_separator(log_path)
 
 
 if __name__ == "__main__":

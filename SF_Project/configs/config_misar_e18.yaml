@@ -12,6 +12,19 @@ project:
 
 eval:                                   # 评估相关设置
   checkpoint: "best"                   # 默认使用哪个检查点（key 名，可在 checkpoints 映射中定义）
+  n_clusters: 7                         # mclust 聚类簇数
+  mclust_pca_dim: 20                    # mclust 前 PCA 维度（加速聚类）
+  resolution: 0.9                       # 默认 Leiden 分辨率（CLI --resolution 可覆盖）
+  moran_k: 6                            # Moran's I 计算邻居数
+  plotting:
+    figure_dpi: 180                     # 图片 DPI
+    figure_size: [14, 6]                # 总画布尺寸
+    panel_size: [6, 6]                  # Scanpy 单图默认尺寸
+    umap_point_size: 60                 # UMAP 点大小
+    spatial_point_size: 80              # Spatial 点大小
+    alpha: 1.0                          # 点透明度
+    legend_loc: "on data"              # UMAP 图例位置
+    palette_mode: "high_contrast"      # high_contrast/tab20
   checkpoints:                          # key->文件名映射，可自由扩展
     best: "ckpt_best.pth"
     final: "ckpt_300.pth"
@@ -90,4 +103,5 @@ train:
   save_every: 50                        # 周期性保存间隔
   device: "cuda"                       # 设备
   log_interval: 10                      # 日志打印间隔（轮）
+  log_tail_blank_lines: 5               # 训练结束后在日志末尾追加空行数
   best_name: "ckpt_best.pth"           # 最优模型文件名

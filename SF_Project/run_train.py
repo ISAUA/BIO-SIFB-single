@@ -40,6 +40,11 @@ def setup_logger(log_path):
     return logger
 
 
+def append_log_separator(log_path):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 88 + "\n")
+
+
 def torch_load_compat(path, map_location, weights_only):
     try:
         return torch.load(path, map_location=map_location, weights_only=weights_only)
@@ -94,6 +99,8 @@ def main():
     logger.info("Training started.")
     trainer.run(rna_feat, atac_feat, edge_index, u_basis, evals)
     logger.info("Training run complete.")
+    if os.environ.get("SF_PIPELINE_RUN") != "1":
+        append_log_separator(log_path)
 
 if __name__ == "__main__":
     main()

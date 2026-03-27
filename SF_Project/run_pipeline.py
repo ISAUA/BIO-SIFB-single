@@ -24,7 +24,7 @@ def parse_args():
         help="要执行的步骤，逗号分隔，可选 preprocess/train/evaluate，例如: preprocess,train",
     )
     parser.add_argument("--checkpoint", default=None, help="评估阶段使用的 checkpoint key 或文件名，可选")
-    parser.add_argument("--resolution", type=float, default=None, help="评估阶段的 Leiden 分辨率，可选")
+    parser.add_argument("--n-clusters", type=int, default=None, help="评估阶段 mclust 聚类簇数，可选")
     return parser.parse_args()
 
 
@@ -55,11 +55,18 @@ def setup_logger(log_path):
     return logger
 
 
+def append_log_separator(log_path):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 88 + "\n")
+
+
 def run_cmd(label, cmd, logger=None):
     print(f"\n===== {label}: {' '.join(cmd)} =====")
     if logger is not None:
         logger.info("Step start: %s", label)
-    result = subprocess.run(cmd)
+    env = os.environ.copy()
+    env["SF_PIPELINE_RUN"] = "1"
+    result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
         if logger is not None:
             logger.error("Step failed: %s | return_code=%d", label, result.returncode)
@@ -82,6 +89,7 @@ def main():
     log_path = resolve_train_log_path(save_dir)
     logger = setup_logger(log_path)
     logger.info("Pipeline start: dataset=%s", args.dataset)
+    logger.info("Config:\n%s", yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
 
     requested_steps = [s.strip() for s in args.steps.split(',') if s.strip()]
     for step in requested_steps:
@@ -107,8 +115,8 @@ def main():
         eval_cmd = [sys.executable, os.path.join(base_dir, "run_evaluate.py"), "--config", config_path]
         if args.checkpoint:
             eval_cmd.extend(["--checkpoint", args.checkpoint])
-        if args.resolution is not None:
-            eval_cmd.extend(["--resolution", str(args.resolution)])
+        if args.n_clusters is not None:
+            eval_cmd.extend(["--n-clusters", str(args.n_clusters)])
         steps.append(("Evaluate", eval_cmd))
 
     if not steps:
@@ -119,10 +127,12 @@ def main():
     print(f"执行顺序: {[name for name, _ in steps]}")
     logger.info("Pipeline steps: %s", [name for name, _ in steps])
 
-    for name, cmd in steps:
-        run_cmd(name, cmd, logger=logger)
-
-    logger.info("Pipeline finished successfully.")
+    try:
+        for name, cmd in steps:
+            run_cmd(name, cmd, logger=logger)
+        logger.info("Pipeline finished successfully.")
+    finally:
+        append_log_separator(log_path)
 
 
 if __name__ == "__main__":

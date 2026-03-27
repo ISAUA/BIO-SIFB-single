@@ -24,7 +24,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate SFIB freq vs spa branches")
     parser.add_argument("--config", default="configs/config_human.yaml", help="Path to YAML config file")
     parser.add_argument("--checkpoint", default=None, help="Checkpoint key or filename; defaults to config eval.checkpoint")
-    parser.add_argument("--resolution", type=float, default=0.5, help="Leiden clustering resolution")
+    parser.add_argument("--resolution", type=float, default=None, help="Leiden clustering resolution (override config)")
     return parser.parse_args()
 
 
@@ -33,6 +33,20 @@ def torch_load_compat(path, map_location, weights_only):
         return torch.load(path, map_location=map_location, weights_only=weights_only)
     except TypeError:
         return torch.load(path, map_location=map_location)
+
+
+def build_high_contrast_palette(n_clusters, mode="high_contrast"):
+    if mode == "tab20":
+        cmap = plt.get_cmap("tab20")
+        return [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
+
+    base = [
+        "#e6194b", "#3cb44b", "#ffe119", "#0082c8", "#f58231",
+        "#911eb4", "#46f0f0", "#f032e6", "#d2f53c", "#fabebe",
+        "#008080", "#e6beff", "#aa6e28", "#fffac8", "#800000",
+        "#aaffc3", "#808000", "#ffd8b1", "#000080", "#808080",
+    ]
+    return [base[i % len(base)] for i in range(max(1, n_clusters))]
 
 
 def infer_epoch_label(ckpt_name: str) -> str:
@@ -45,7 +59,7 @@ def infer_epoch_label(ckpt_name: str) -> str:
     return base
 
 
-def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label: str, epoch_label: str):
+def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label: str, epoch_label: str, plot_cfg=None):
     """Run UMAP + Leiden and save UMAP/Spatial plots and h5ad for a given embedding."""
     if isinstance(z_embed, torch.Tensor):
         z_embed = z_embed.cpu().numpy()
@@ -69,11 +83,21 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
     except Exception:
         sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
 
+    plot_cfg = plot_cfg or {}
     n_clusters = int(adata.obs["cluster"].nunique())
-    cmap = plt.get_cmap("tab20")
-    vivid_palette = [cmap(i % cmap.N) for i in range(max(1, n_clusters))]
-    sc.set_figure_params(dpi=180, figsize=(6, 6), frameon=True)
-    fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+    palette_mode = plot_cfg.get("palette_mode", "high_contrast")
+    vivid_palette = build_high_contrast_palette(n_clusters, mode=palette_mode)
+
+    panel_size = plot_cfg.get("panel_size", [6, 6])
+    fig_size = plot_cfg.get("figure_size", [14, 6])
+    dpi = int(plot_cfg.get("figure_dpi", 180))
+    umap_size = float(plot_cfg.get("umap_point_size", 60))
+    spatial_size = float(plot_cfg.get("spatial_point_size", 80))
+    alpha = float(plot_cfg.get("alpha", 1.0))
+    legend_loc = plot_cfg.get("legend_loc", "on data")
+
+    sc.set_figure_params(dpi=dpi, figsize=tuple(panel_size), frameon=True)
+    fig, axs = plt.subplots(1, 2, figsize=tuple(fig_size))
 
     sc.pl.umap(
         adata,
@@ -81,11 +105,11 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
         ax=axs[0],
         show=False,
         title=f"{label} UMAP",
-        legend_loc="on data",
+        legend_loc=legend_loc,
         frameon=True,
-        size=60,
+        size=umap_size,
         palette=vivid_palette,
-        alpha=1.0,
+        alpha=alpha,
         edges=False,
     )
 
@@ -96,10 +120,10 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
         ax=axs[1],
         show=False,
         title=f"{label} Spatial",
-        size=80,
+        size=spatial_size,
         frameon=True,
         palette=vivid_palette,
-        alpha=1.0,
+        alpha=alpha,
         edges=False,
     )
 
@@ -133,6 +157,10 @@ def main():
 
     config = load_config(args.config)
     set_seed(config["project"].get("seed", 42))
+    eval_cfg = config.get("eval", {})
+    plot_cfg = eval_cfg.get("plotting", {})
+    resolution = float(args.resolution if args.resolution is not None else eval_cfg.get("resolution", 0.9))
+
 
     processed_dir = config["data"]["processed_path"]
     save_dir = config["project"]["save_dir"]
@@ -159,7 +187,6 @@ def main():
     config["model"]["rna_in_dim"] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
 
-    eval_cfg = config.get("eval", {})
     ckpt_key = args.checkpoint or eval_cfg.get("checkpoint", "best")
     ckpt_map = eval_cfg.get("checkpoints", {})
     ckpt_name = ckpt_map.get(ckpt_key, ckpt_key)
@@ -180,8 +207,8 @@ def main():
         z_fused, _, _, _, _, _, _, z_base, z_detail = model(rna_feat, atac_feat, edge_index, u_basis, evals)
 
     # Save and plot frequency branch (z_base) and spatial branch (z_detail)
-    visualize_and_save(z_base, coords, save_dir, args.resolution, label="freq", epoch_label=epoch_label)
-    visualize_and_save(z_detail, coords, save_dir, args.resolution, label="spa", epoch_label=epoch_label)
+    visualize_and_save(z_base, coords, save_dir, resolution, label="freq", epoch_label=epoch_label, plot_cfg=plot_cfg)
+    visualize_and_save(z_detail, coords, save_dir, resolution, label="spa", epoch_label=epoch_label, plot_cfg=plot_cfg)
 
     print("🎉 Done.")
 

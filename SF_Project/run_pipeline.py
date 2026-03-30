@@ -9,6 +9,14 @@ import yaml
 DATASET_CONFIG = {
     "human": "configs/config_human.yaml",
     "mouse": "configs/config_mouse.yaml",
+    "misar_e11_0-s1": "configs/config_misar_e11_0_s1.yaml",
+    "misar_e11_0-s2": "configs/config_misar_e11_0_s2.yaml",
+    "misar_e13_5-s1": "configs/config_misar_e13_5_s1.yaml",
+    "misar_e13_5-s2": "configs/config_misar_e13_5_s2.yaml",
+    "misar_e15-5-s1": "configs/config_misar_e15_5_s1.yaml",
+    "misar_e15-5-s2": "configs/config_misar_e15_5_s2.yaml",
+    "misar_e18-5-s1": "configs/config_misar_e18_5_s1.yaml",
+    "misar_e18-5-s2": "configs/config_misar_e18_5_s2.yaml",
     "misar_e18": "configs/config_misar_e18.yaml",
 }
 

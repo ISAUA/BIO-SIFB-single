@@ -206,6 +206,7 @@ def visualize_and_save(
     logger=None,
     moran_k=6,
     plot_cfg=None,
+    checkpoint_name=None,
 ):
     """
     使用 Scanpy 进行降维、聚类和绘图
@@ -265,6 +266,8 @@ def visualize_and_save(
     # 无侵入式聚合度评估 (Moran's I) - 不打印终端，仅用于顶部图标题
     # ==============================================================================
     moran_title_str = ""
+    mi_latent_avg = None
+    mi_cluster_avg = None
     cluster_scores = None
     try:
         # 评估视角 1：连续隐特征 z_final 的平均空间自相关性
@@ -288,6 +291,8 @@ def visualize_and_save(
             )
     except Exception as e:
         moran_title_str = " | Moran's I Error"
+        if logger is not None:
+            logger.warning("Moran's I computation failed: %s", str(e))
     # ==============================================================================
 
     # 3. 绘图 (UMAP + Spatial)
@@ -379,10 +384,27 @@ def visualize_and_save(
     if logger is not None:
         logger.info("Artifacts: %s | %s", plot_path, h5ad_path)
 
+    metric_tag = epoch_label or "unknown"
+    ckpt_tag = checkpoint_name or "unknown"
+
+    def _fmt_metric(value):
+        return "NA" if value is None else f"{float(value):.4f}"
+
+    if logger is not None:
+        logger.info(
+            "Eval metrics | checkpoint=%s | epoch=%s | latent_moran=%s | cluster_moran=%s",
+            ckpt_tag,
+            metric_tag,
+            _fmt_metric(mi_latent_avg),
+            _fmt_metric(mi_cluster_avg),
+        )
+
     if cluster_scores is not None:
         if logger is not None:
             logger.info(
-                "GT metrics | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
+                "GT metrics | checkpoint=%s | epoch=%s | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
+                ckpt_tag,
+                metric_tag,
                 cluster_scores['ARI'],
                 cluster_scores['NMI'],
                 cluster_scores['AMI'],
@@ -485,6 +507,7 @@ def main():
         logger=logger,
         moran_k=moran_k,
         plot_cfg=plot_cfg,
+        checkpoint_name=ckpt_name,
     )
 
     logger.info("Evaluation complete.")

@@ -1,6 +1,7 @@
 import os
 import argparse
 import logging
+import time
 import torch
 import yaml
 import numpy as np
@@ -48,12 +49,64 @@ def infer_ground_truth_key(obs_df, preferred_key=None):
     return None
 
 
-def reduce_modality_features(X, n_components, seed, modality_name):
+def _resolve_reduce_device(device_pref: str):
+    if device_pref == "cpu":
+        return torch.device("cpu")
+    if device_pref == "cuda":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def _torch_dense_pca_lowrank(X_dense, n_components, seed, device, q_offset=8, niter=3):
+    q = int(min(max(1, n_components + int(q_offset)), min(X_dense.shape[0], X_dense.shape[1])))
+    torch.manual_seed(int(seed))
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(int(seed))
+    with torch.no_grad():
+        x_t = torch.as_tensor(X_dense, dtype=torch.float32, device=device)
+        U, S, _ = torch.pca_lowrank(x_t, q=q, center=True, niter=int(niter))
+        z_t = U[:, :n_components] * S[:n_components].unsqueeze(0)
+        z_np = z_t.detach().cpu().numpy()
+        del x_t, U, S, z_t
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return z_np
+
+
+def _torch_sparse_svd_lowrank(X_sparse, n_components, seed, device, q_offset=8, niter=3):
+    x_coo = X_sparse.tocoo()
+    indices = np.vstack((x_coo.row, x_coo.col))
+    i_t = torch.as_tensor(indices, dtype=torch.long, device=device)
+    v_t = torch.as_tensor(x_coo.data, dtype=torch.float32, device=device)
+    x_t = torch.sparse_coo_tensor(i_t, v_t, size=x_coo.shape, device=device).coalesce()
+
+    q = int(min(max(1, n_components + int(q_offset)), min(x_coo.shape[0], x_coo.shape[1])))
+    torch.manual_seed(int(seed))
+    if device.type == "cuda":
+        torch.cuda.manual_seed_all(int(seed))
+
+    with torch.no_grad():
+        U, S, _ = torch.svd_lowrank(x_t, q=q, niter=int(niter))
+        z_t = U[:, :n_components] * S[:n_components].unsqueeze(0)
+        z_np = z_t.detach().cpu().numpy()
+        del i_t, v_t, x_t, U, S, z_t
+    if device.type == "cuda":
+        torch.cuda.empty_cache()
+    return z_np
+
+
+def reduce_modality_features(X, n_components, seed, modality_name, reduce_cfg=None):
     """
     使用 PCA/TruncatedSVD 将模态特征降到固定维度。
     - 稀疏输入优先使用 TruncatedSVD，避免转 dense 导致内存开销过大。
     - 稠密输入使用 PCA。
     """
+    reduce_cfg = reduce_cfg or {}
+    reduce_mode = str(reduce_cfg.get('mode', 'gpu_safe')).lower()  # cpu|gpu_safe|gpu_full
+    device_pref = str(reduce_cfg.get('device', 'auto')).lower()    # auto|cuda|cpu
+    q_offset = int(reduce_cfg.get('q_offset', 8))
+    niter = int(reduce_cfg.get('niter', 3))
+
     n_components = int(n_components)
     if n_components <= 0:
         raise ValueError(f"{modality_name} n_components must be positive, got {n_components}.")
@@ -68,14 +121,56 @@ def reduce_modality_features(X, n_components, seed, modality_name):
         )
         n_components = max_rank
 
-    print(f"   [{modality_name}] Reducing features to {n_components} dims...")
+    device = _resolve_reduce_device(device_pref)
+    t0 = time.perf_counter()
+    print(
+        f"   [{modality_name}] Reducing features to {n_components} dims "
+        f"(mode={reduce_mode}, device={device.type})..."
+    )
+
     if sparse.issparse(X):
-        reducer = TruncatedSVD(n_components=n_components, random_state=int(seed))
-        Z = reducer.fit_transform(X)
+        # 稀疏模态默认保持 CPU TruncatedSVD，优先稳定性。
+        use_sparse_gpu = (reduce_mode == 'gpu_full' and device.type == 'cuda')
+        if use_sparse_gpu:
+            try:
+                Z = _torch_sparse_svd_lowrank(
+                    X,
+                    n_components=n_components,
+                    seed=seed,
+                    device=device,
+                    q_offset=q_offset,
+                    niter=niter,
+                )
+            except Exception as e:
+                print(f"   ⚠️ [{modality_name}] GPU sparse SVD failed, fallback to CPU TruncatedSVD. reason={e}")
+                reducer = TruncatedSVD(n_components=n_components, random_state=int(seed))
+                Z = reducer.fit_transform(X)
+        else:
+            reducer = TruncatedSVD(n_components=n_components, random_state=int(seed))
+            Z = reducer.fit_transform(X)
     else:
         X_dense = np.asarray(X, dtype=np.float32)
-        reducer = PCA(n_components=n_components, random_state=int(seed), svd_solver='auto')
-        Z = reducer.fit_transform(X_dense)
+        use_dense_gpu = (reduce_mode in ('gpu_safe', 'gpu_full') and device.type == 'cuda')
+        if use_dense_gpu:
+            try:
+                Z = _torch_dense_pca_lowrank(
+                    X_dense,
+                    n_components=n_components,
+                    seed=seed,
+                    device=device,
+                    q_offset=q_offset,
+                    niter=niter,
+                )
+            except Exception as e:
+                print(f"   ⚠️ [{modality_name}] GPU dense PCA failed, fallback to CPU PCA. reason={e}")
+                reducer = PCA(n_components=n_components, random_state=int(seed), svd_solver='auto')
+                Z = reducer.fit_transform(X_dense)
+        else:
+            reducer = PCA(n_components=n_components, random_state=int(seed), svd_solver='auto')
+            Z = reducer.fit_transform(X_dense)
+
+    dt = time.perf_counter() - t0
+    print(f"   [{modality_name}] Dim reduction done in {dt:.2f}s")
 
     return np.asarray(Z, dtype=np.float32)
 
@@ -128,6 +223,7 @@ def main():
     atac_target_sum = params.get('atac_target_sum', 1e4)
     tfidf_eps = float(params.get('tfidf_eps', 1e-6))
     seed = int(config['project'].get('seed', 42))
+    reduce_cfg = params.get('reduce', {})
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -265,8 +361,8 @@ def main():
     atac_pca_dim = int(params.get('atac_pca_dim', 512))
 
     print("\n📉 Reducing RNA/ATAC features before model input...")
-    rna_feat_np = reduce_modality_features(adata_rna.X, rna_pca_dim, seed, "RNA")
-    atac_feat_np = reduce_modality_features(adata_atac.X, atac_pca_dim, seed, "ATAC")
+    rna_feat_np = reduce_modality_features(adata_rna.X, rna_pca_dim, seed, "RNA", reduce_cfg=reduce_cfg)
+    atac_feat_np = reduce_modality_features(adata_atac.X, atac_pca_dim, seed, "ATAC", reduce_cfg=reduce_cfg)
     print(f"   ✅ Reduced RNA shape: {rna_feat_np.shape}")
     print(f"   ✅ Reduced ATAC shape: {atac_feat_np.shape}")
     logger.info("Reduced shapes: RNA=%s, ATAC=%s", rna_feat_np.shape, atac_feat_np.shape)

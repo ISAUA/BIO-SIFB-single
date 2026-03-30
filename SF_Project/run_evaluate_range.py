@@ -202,6 +202,7 @@ def visualize_and_save(
     logger=None,
     moran_k=6,
     plot_cfg=None,
+    checkpoint_name=None,
 ):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
@@ -246,6 +247,8 @@ def visualize_and_save(
     adata.obs["cluster"] = pd.Categorical(adata.obs["cluster"], categories=cluster_list, ordered=True)
 
     moran_title_str = ""
+    mi_latent_avg = None
+    mi_cluster_avg = None
     cluster_scores = None
     try:
         mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
@@ -266,8 +269,10 @@ def visualize_and_save(
                 f" | AMI: {cluster_scores['AMI']:.4f}"
                 f" | HOM: {cluster_scores['HOM']:.4f}"
             )
-    except Exception:
+    except Exception as e:
         moran_title_str = " | Moran's I Error"
+        if logger is not None:
+            logger.warning("Moran's I computation failed for %s: %s", output_suffix or "default", str(e))
 
     plot_cfg = plot_cfg or {}
     panel_size = plot_cfg.get("panel_size", [6, 6])
@@ -335,11 +340,29 @@ def visualize_and_save(
     h5ad_path = os.path.join(pred_dir, f"embedding_joint_{suffix}.h5ad")
     adata.write(h5ad_path)
 
+    metric_tag = epoch_label or "unknown"
+    ckpt_tag = checkpoint_name or "unknown"
+
+    def _fmt_metric(value):
+        return "NA" if value is None else f"{float(value):.4f}"
+
+    if logger is not None:
+        logger.info(
+            "Eval metrics (%s) | checkpoint=%s | epoch=%s | latent_moran=%s | cluster_moran=%s",
+            suffix,
+            ckpt_tag,
+            metric_tag,
+            _fmt_metric(mi_latent_avg),
+            _fmt_metric(mi_cluster_avg),
+        )
+
     if cluster_scores is not None:
         if logger is not None:
             logger.info(
-                "GT metrics (%s) | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
+                "GT metrics (%s) | checkpoint=%s | epoch=%s | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | n_valid=%d",
                 suffix,
+                ckpt_tag,
+                metric_tag,
                 cluster_scores["ARI"],
                 cluster_scores["NMI"],
                 cluster_scores["AMI"],
@@ -455,6 +478,7 @@ def main():
             logger=logger,
             moran_k=moran_k,
             plot_cfg=plot_cfg,
+            checkpoint_name=ckpt_name,
         )
 
         logger.info("Artifacts (%s): %s | %s", suffix, plot_path, h5ad_path)

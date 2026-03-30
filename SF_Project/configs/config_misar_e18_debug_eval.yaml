@@ -23,6 +23,11 @@ data:                                 # 数据配置
     spatial_csv: SPARC_barcode.csv    # 空间坐标 CSV 文件名
     gtf: "../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
   parameters:                         # 预处理超参数
+    reduce:                         # 降维加速设置
+      mode: "gpu_safe"            # cpu|gpu_safe|gpu_full（默认稳定优先）
+      device: "auto"               # auto|cuda|cpu
+      q_offset: 8                 # 低秩分解冗余维度（q=n_components+q_offset）
+      niter: 3                    # 低秩迭代次数
     n_top_genes: 3000                 # RNA 高变基因数
     rna_min_cells: 3                  # RNA 基因最小细胞数过滤
     rna_target_sum: 1e4               # RNA 归一化目标总和

@@ -16,13 +16,19 @@ class INOUnit(nn.Module):
         self.gcn_s2 = GCNConv(dim, dim)
         self.gcn_t2 = GCNConv(dim, dim)
 
-    def forward(self, x_main: torch.Tensor, x_guide: torch.Tensor, edge_index: torch.Tensor):
-        s1 = torch.tanh(self.gcn_s1(x_guide, edge_index))
-        t1 = self.gcn_t1(x_guide, edge_index)
+    def forward(
+        self,
+        x_main: torch.Tensor,
+        x_guide: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_weight: torch.Tensor = None,
+    ):
+        s1 = torch.tanh(self.gcn_s1(x_guide, edge_index, edge_weight))
+        t1 = self.gcn_t1(x_guide, edge_index, edge_weight)
         x_main_star = x_main * torch.exp(s1) + t1
 
-        s2 = torch.tanh(self.gcn_s2(x_main_star, edge_index))
-        t2 = self.gcn_t2(x_main_star, edge_index)
+        s2 = torch.tanh(self.gcn_s2(x_main_star, edge_index, edge_weight))
+        t2 = self.gcn_t2(x_main_star, edge_index, edge_weight)
         x_guide_star = x_guide * torch.exp(s2) + t2
 
         return x_main_star, x_guide_star
@@ -182,6 +188,9 @@ class SymmetricSFIB(nn.Module):
         self,
         dim: int = 128,
         num_ino_layers: int = 3,
+        ino_use_edge_weight: bool = True,
+        pre_smooth_enable: bool = True,
+        pre_smooth_alpha: float = 1,
         debug_mode: bool = False,
         debug_epochs=None,
         debug_every_n_epochs: int = 0,
@@ -189,6 +198,9 @@ class SymmetricSFIB(nn.Module):
         super().__init__()
         self.dim = int(dim)
         self.num_ino_layers = int(num_ino_layers)
+        self.ino_use_edge_weight = bool(ino_use_edge_weight)
+        self.pre_smooth_enable = bool(pre_smooth_enable)
+        self.pre_smooth_alpha = float(max(0.0, min(1.0, pre_smooth_alpha)))
 
         # Frequency gate
         self.freq_gate = SpectralTransformerGate(
@@ -199,6 +211,11 @@ class SymmetricSFIB(nn.Module):
         )
 
         # Spatial INO stack
+        self.pre_smooth = GCNConv(self.dim, self.dim, bias=False)
+        with torch.no_grad():
+            self.pre_smooth.lin.weight.copy_(torch.eye(self.dim))
+        self.pre_smooth.lin.weight.requires_grad_(False)
+
         self.ino_layers = nn.ModuleList([INOUnit(self.dim) for _ in range(self.num_ino_layers)])
         self.spa_gate = nn.Sequential(
             nn.Linear(self.dim * 2, self.dim),
@@ -226,10 +243,31 @@ class SymmetricSFIB(nn.Module):
         z_base = torch.matmul(u_basis, hat_fused)
         return z_base, attn_freq
 
-    def spatial_branch(self, h_rna: torch.Tensor, h_atac: torch.Tensor, edge_index: torch.Tensor):
+    def _smooth_with_fidelity(
+        self,
+        x: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_weight: torch.Tensor = None,
+    ) -> torch.Tensor:
+        x_smooth = self.pre_smooth(x, edge_index, edge_weight)
+        return (1.0 - self.pre_smooth_alpha) * x_smooth + self.pre_smooth_alpha * x
+
+    def spatial_branch(
+        self,
+        h_rna: torch.Tensor,
+        h_atac: torch.Tensor,
+        edge_index: torch.Tensor,
+        edge_weight: torch.Tensor = None,
+    ):
+        effective_edge_weight = edge_weight if self.ino_use_edge_weight else None
+
         main, guide = h_rna, h_atac
+        if self.pre_smooth_enable:
+            main = self._smooth_with_fidelity(main, edge_index, effective_edge_weight)
+            guide = self._smooth_with_fidelity(guide, edge_index, effective_edge_weight)
+
         for ino in self.ino_layers:
-            main, guide = ino(main, guide, edge_index)
+            main, guide = ino(main, guide, edge_index, edge_weight=effective_edge_weight)
         gamma_spa = self.spa_gate(torch.cat([main, guide], dim=1))
         z_detail = gamma_spa * main + (1.0 - gamma_spa) * guide
         return z_detail, gamma_spa
@@ -241,8 +279,9 @@ class SymmetricSFIB(nn.Module):
         edge_index: torch.Tensor,
         u_basis: torch.Tensor,
         evals: torch.Tensor = None,
+        edge_weight: torch.Tensor = None,
     ):
         z_base, m_freq = self.frequency_branch(h_rna, h_atac, u_basis, evals)
-        z_detail, gamma_spa = self.spatial_branch(h_rna, h_atac, edge_index)
+        z_detail, gamma_spa = self.spatial_branch(h_rna, h_atac, edge_index, edge_weight=edge_weight)
         z_fused = self.out_norm(z_base + self.gamma * z_detail)
         return z_fused, z_base, z_detail, m_freq, gamma_spa

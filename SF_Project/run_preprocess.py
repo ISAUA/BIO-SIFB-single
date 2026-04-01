@@ -394,10 +394,14 @@ def main():
     # 默认：使用降维后的 RNA 特征构建加权图
     rna_features = rna_feat_np
     graph_outputs = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
-    if len(graph_outputs) == 3:
+    if len(graph_outputs) == 4:
+        edge_index, edge_weight, u_basis, evals = graph_outputs
+    elif len(graph_outputs) == 3:
         edge_index, u_basis, evals = graph_outputs
+        edge_weight = None
     else:
         edge_index, u_basis = graph_outputs
+        edge_weight = None
         evals = None
     # 备选：使用空间距离高斯衰减
     # edge_index, u_basis = build_spatial_graph(coords, k=params['knn_k'])
@@ -438,6 +442,9 @@ def main():
         "rna_dim": rna_feat.shape[1],
         "atac_dim": atac_feat.shape[1] # 记录动态 ATAC 维度
     }
+
+    if edge_weight is not None:
+        data_dict["edge_weight"] = edge_weight
 
     if evals is not None:
         data_dict["evals"] = evals

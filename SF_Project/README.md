@@ -16,6 +16,10 @@ pip install -r requirements.txt
 
 ## 快速开始
 
+### 0) 进入环境和文件夹
+conda activate sc_bridge
+cd SF_Project
+
 ### 1) 全流程运行
 
 ```bash
@@ -29,9 +33,9 @@ python run_pipeline.py --dataset misar_e18-5-s1
 `--steps` 逗号分隔，可选 `preprocess`, `train`, `evaluate`。
 
 ```bash
-python run_pipeline.py --dataset mouse --steps preprocess
-python run_pipeline.py --dataset mouse --steps preprocess,train
-python run_pipeline.py --dataset mouse --steps evaluate
+python run_pipeline.py --dataset misar_e18-5-s1 --steps preprocess
+python run_pipeline.py --dataset misar_e18-5-s1 --steps preprocess,train
+python run_pipeline.py --dataset misar_e18-5-s1 --steps evaluate
 ```
 
 ### 3) 评估阶段附加参数
@@ -63,13 +67,13 @@ python run_pipeline.py --dataset misar_e18-5-s2
 
 ```bash
 # preprocess
-python run_pipeline.py --dataset misar_e13_5-s1 --steps preprocess
+python run_pipeline.py --dataset misar_e18_5-s1 --steps preprocess
 
 # train
-python run_pipeline.py --dataset misar_e13_5-s1 --steps train
+python run_pipeline.py --dataset misar_e18_5-s1 --steps train
 
 # evaluate
-python run_pipeline.py --dataset misar_e13_5-s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 7
+python run_pipeline.py --dataset misar_e18_5-s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 7
 ```
 
 ### 兼容别名
@@ -81,7 +85,7 @@ python run_pipeline.py --dataset misar_e13_5-s1 --steps evaluate --checkpoint ck
 当你需要一次性评估一段轮次（例如 1500-2000）时：
 
 ```bash
-python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start 1500 --end 2000 --step 100 --best-epoch 2000 --n-clusters 14
+python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
 ```
 
 说明：

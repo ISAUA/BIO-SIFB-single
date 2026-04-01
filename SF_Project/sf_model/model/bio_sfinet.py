@@ -103,6 +103,9 @@ class BioSFINet(nn.Module):
         proj_hidden = model_cfg.get('proj_hidden_dim', 64)
         proj_output = model_cfg.get('proj_output_dim', 64)
         num_ino_layers = model_cfg.get('sfib_ino_layers', 3)
+        ino_use_edge_weight = bool(model_cfg.get('ino_use_edge_weight', True))
+        ino_pre_smooth_enable = bool(model_cfg.get('ino_pre_smooth_enable', True))
+        ino_pre_smooth_alpha = float(model_cfg.get('ino_pre_smooth_alpha', 0.2))
         sfib_debug_mode = bool(model_cfg.get('sfib_debug_mode', False))
         sfib_debug_epochs = model_cfg.get('sfib_debug_epochs', [])
         sfib_debug_every_n_epochs = int(model_cfg.get('sfib_debug_every_n_epochs', 0))
@@ -119,6 +122,9 @@ class BioSFINet(nn.Module):
         self.sfib = SymmetricSFIB(
             dim=sfib_dim,
             num_ino_layers=num_ino_layers,
+            ino_use_edge_weight=ino_use_edge_weight,
+            pre_smooth_enable=ino_pre_smooth_enable,
+            pre_smooth_alpha=ino_pre_smooth_alpha,
             debug_mode=sfib_debug_mode,
             debug_epochs=sfib_debug_epochs,
             debug_every_n_epochs=sfib_debug_every_n_epochs,
@@ -155,7 +161,7 @@ class BioSFINet(nn.Module):
     def set_debug_epoch(self, epoch=None):
         self.sfib.set_debug_epoch(epoch)
 
-    def forward(self, x_rna, x_atac, edge_index, u_basis, evals=None):
+    def forward(self, x_rna, x_atac, edge_index, u_basis, evals=None, edge_weight=None):
         # Encode modalities independently
         h_rna = self.rna_enc(x_rna, edge_index)
         h_atac = self.atac_enc(x_atac)
@@ -165,7 +171,9 @@ class BioSFINet(nn.Module):
         f_atac = self.atac_proj(h_atac)
 
         # Symmetric selective fusion (single tower)
-        z_fused, z_base, z_detail, m_freq, gamma_spa = self.sfib(f_rna, f_atac, edge_index, u_basis, evals)
+        z_fused, z_base, z_detail, m_freq, gamma_spa = self.sfib(
+            f_rna, f_atac, edge_index, u_basis, evals, edge_weight=edge_weight
+        )
 
         # Decode both modalities from fused embedding
         rec_rna = self.rna_dec(z_fused)

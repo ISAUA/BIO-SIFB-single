@@ -84,7 +84,7 @@ class SFTrainer:
         cosine_scale = 0.5 * (1.0 + math.cos(math.pi * progress))
         return self.lambda_clip_init * cosine_scale
 
-    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, evals, epoch):
+    def train_epoch(self, rna_feat, atac_feat, edge_index, u_basis, evals, epoch, edge_weight=None):
         self.model.train()
         self.optimizer.zero_grad()
 
@@ -94,13 +94,15 @@ class SFTrainer:
         rna_feat = rna_feat.to(self.device)
         atac_feat = atac_feat.to(self.device)
         edge_index = edge_index.to(self.device)
+        if edge_weight is not None:
+            edge_weight = edge_weight.to(self.device)
         u_basis = u_basis.to(self.device)
         if evals is not None:
             evals = evals.to(self.device)
         
         # Forward pass (single fused tower with optional pre-fusion contrastive heads)
         z_fused, p_rna, p_atac, rec_rna, rec_atac, *_ = self.model(
-            rna_feat, atac_feat, edge_index, u_basis, evals
+            rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight
         )
         
         # 1. 重构损失
@@ -131,14 +133,14 @@ class SFTrainer:
             "clip_weight": clip_weight
         }
 
-    def run(self, rna_data, atac_data, edge_index, u_basis, evals=None):
+    def run(self, rna_data, atac_data, edge_index, u_basis, evals=None, edge_weight=None):
         epochs = self.epochs
         best_loss = float('inf')
 
         self.logger.info("Training started: epochs=%d", epochs)
         progress = trange(1, epochs + 1, desc="Training", unit="epoch", dynamic_ncols=True)
         for epoch in progress:
-            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, evals, epoch)
+            metrics = self.train_epoch(rna_data, atac_data, edge_index, u_basis, evals, epoch, edge_weight=edge_weight)
 
             # 更新学习率调度
             self.lr_scheduler.step()

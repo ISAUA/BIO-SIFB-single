@@ -48,7 +48,7 @@ data:                                 # 数据配置
     atac_target_sum: 1e4              # ATAC 归一化目标总和
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
-    knn_k: 6                          # 空间图 k 近邻
+    knn_k: 10                          # 空间图 k 近邻
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
@@ -64,6 +64,9 @@ model:                                # 模型结构配置
   latent_dim: 50                      # 潜变量维度
   sfib_dim: 128                       # SFIB 特征维度
   sfib_ino_layers: 2                  # SFIB INO 层数
+  ino_use_edge_weight: false          # INO 是否使用边权重（false 时仅用拓扑）
+  ino_pre_smooth_enable: false        # INO 前是否启用预平滑
+  ino_pre_smooth_alpha: 1.0           # 预平滑保真系数 alpha（禁用预平滑时该值不生效）
   proj_hidden_dim: 64                 # 对比投影头隐藏维度
   proj_output_dim: 64                 # 对比投影头输出维度
   rna_dec_hidden: 512                 # RNA 解码器隐藏维度

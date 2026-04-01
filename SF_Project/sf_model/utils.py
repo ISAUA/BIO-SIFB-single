@@ -170,8 +170,9 @@ def build_spatial_graph(coords, features=None, k=6, device=None):
     u_basis = torch.FloatTensor(evecs)
     evals = torch.FloatTensor(evals).to(target_device)
     edge_index = torch.tensor(np.array([src, dst]), dtype=torch.long)
-    
-    return edge_index, u_basis, evals
+    edge_weight = torch.FloatTensor(weights)
+
+    return edge_index, edge_weight, u_basis, evals
 
 
 

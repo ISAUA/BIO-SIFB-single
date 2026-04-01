@@ -79,6 +79,7 @@ def main():
     atac_feat = data_dict["atac_feat"]
     coords = data_dict["coords"]
     edge_index = data_dict["edge_index"]
+    edge_weight = data_dict.get("edge_weight", None)
     u_basis = data_dict["u_basis"]
     evals = data_dict.get("evals", None)
     rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
@@ -97,7 +98,7 @@ def main():
     
     # 5. 开始训练
     logger.info("Training started.")
-    trainer.run(rna_feat, atac_feat, edge_index, u_basis, evals)
+    trainer.run(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
     logger.info("Training run complete.")
     if os.environ.get("SF_PIPELINE_RUN") != "1":
         append_log_separator(log_path)

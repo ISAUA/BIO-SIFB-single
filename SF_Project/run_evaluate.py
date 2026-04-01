@@ -448,6 +448,9 @@ def main():
     atac_feat = data_dict["atac_feat"].to(device)
     coords = data_dict["coords"].to(device)
     edge_index = data_dict["edge_index"].to(device)
+    edge_weight = data_dict.get("edge_weight", None)
+    if edge_weight is not None:
+        edge_weight = edge_weight.to(device)
     u_basis = data_dict["u_basis"].to(device)
     evals = data_dict.get("evals", None)
     if evals is not None:
@@ -490,7 +493,7 @@ def main():
     logger.info("Inference running...")
     with torch.no_grad():
         # Forward pass (single fused tower)
-        outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals)
+        outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
         z_final = outputs[0]
 
     logger.info("Latent shape: %s", z_final.shape)

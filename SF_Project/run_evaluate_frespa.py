@@ -176,6 +176,9 @@ def main():
     atac_feat = data_dict["atac_feat"].to(device)
     coords = data_dict["coords"].to(device)
     edge_index = data_dict["edge_index"].to(device)
+    edge_weight = data_dict.get("edge_weight", None)
+    if edge_weight is not None:
+        edge_weight = edge_weight.to(device)
     u_basis = data_dict["u_basis"].to(device)
     evals = data_dict.get("evals", None)
     if evals is not None:
@@ -204,7 +207,9 @@ def main():
 
     print("🔮 Running inference ...")
     with torch.no_grad():
-        z_fused, _, _, _, _, _, _, z_base, z_detail = model(rna_feat, atac_feat, edge_index, u_basis, evals)
+        z_fused, _, _, _, _, _, _, z_base, z_detail = model(
+            rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight
+        )
 
     # Save and plot frequency branch (z_base) and spatial branch (z_detail)
     visualize_and_save(z_base, coords, save_dir, resolution, label="freq", epoch_label=epoch_label, plot_cfg=plot_cfg)

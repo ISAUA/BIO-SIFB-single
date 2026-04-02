@@ -181,11 +181,20 @@ def set_seed(seed: int = 42, deterministic: bool = True):
     seed = int(seed)
     # CUDA + CuBLAS 在 deterministic 模式下需要该环境变量。
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
+    # 线程库并行会引入浮点规约顺序差异，固定为单线程更稳定。
+    os.environ.setdefault("OMP_NUM_THREADS", "1")
+    os.environ.setdefault("MKL_NUM_THREADS", "1")
+    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
+
+    torch.set_num_threads(1)
+    if hasattr(torch, "set_num_interop_threads"):
+        torch.set_num_interop_threads(1)
 
     torch.backends.cudnn.deterministic = deterministic
     torch.backends.cudnn.benchmark = False

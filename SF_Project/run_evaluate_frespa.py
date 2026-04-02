@@ -59,7 +59,16 @@ def infer_epoch_label(ckpt_name: str) -> str:
     return base
 
 
-def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label: str, epoch_label: str, plot_cfg=None):
+def visualize_and_save(
+    z_embed,
+    coords,
+    save_root: str,
+    resolution: float,
+    label: str,
+    epoch_label: str,
+    plot_cfg=None,
+    seed: int = 42,
+):
     """Run UMAP + Leiden and save UMAP/Spatial plots and h5ad for a given embedding."""
     if isinstance(z_embed, torch.Tensor):
         z_embed = z_embed.cpu().numpy()
@@ -69,19 +78,17 @@ def visualize_and_save(z_embed, coords, save_root: str, resolution: float, label
     adata = sc.AnnData(X=z_embed)
     adata.obsm["spatial"] = coords
 
-    sc.pp.neighbors(adata, use_rep="X")
-    sc.tl.umap(adata)
-    try:
-        sc.tl.leiden(
-            adata,
-            resolution=resolution,
-            key_added="cluster",
-            flavor="igraph",
-            n_iterations=2,
-            directed=False,
-        )
-    except Exception:
-        sc.tl.louvain(adata, resolution=resolution, key_added="cluster")
+    sc.pp.neighbors(adata, use_rep="X", random_state=int(seed))
+    sc.tl.umap(adata, random_state=int(seed))
+    sc.tl.leiden(
+        adata,
+        resolution=resolution,
+        key_added="cluster",
+        flavor="igraph",
+        n_iterations=2,
+        directed=False,
+        random_state=int(seed),
+    )
 
     plot_cfg = plot_cfg or {}
     n_clusters = int(adata.obs["cluster"].nunique())
@@ -157,6 +164,7 @@ def main():
 
     config = load_config(args.config)
     set_seed(config["project"].get("seed", 42))
+    seed = int(config["project"].get("seed", 42))
     eval_cfg = config.get("eval", {})
     plot_cfg = eval_cfg.get("plotting", {})
     resolution = float(args.resolution if args.resolution is not None else eval_cfg.get("resolution", 0.9))
@@ -212,8 +220,26 @@ def main():
         )
 
     # Save and plot frequency branch (z_base) and spatial branch (z_detail)
-    visualize_and_save(z_base, coords, save_dir, resolution, label="freq", epoch_label=epoch_label, plot_cfg=plot_cfg)
-    visualize_and_save(z_detail, coords, save_dir, resolution, label="spa", epoch_label=epoch_label, plot_cfg=plot_cfg)
+    visualize_and_save(
+        z_base,
+        coords,
+        save_dir,
+        resolution,
+        label="freq",
+        epoch_label=epoch_label,
+        plot_cfg=plot_cfg,
+        seed=seed,
+    )
+    visualize_and_save(
+        z_detail,
+        coords,
+        save_dir,
+        resolution,
+        label="spa",
+        epoch_label=epoch_label,
+        plot_cfg=plot_cfg,
+        seed=seed,
+    )
 
     print("🎉 Done.")
 

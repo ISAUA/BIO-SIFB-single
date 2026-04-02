@@ -23,9 +23,7 @@ cd SF_Project
 ### 1) 全流程运行
 
 ```bash
-python run_pipeline.py --dataset human
-python run_pipeline.py --dataset mouse
-python run_pipeline.py --dataset misar_e18-5-s1
+python run_pipeline.py --dataset misar_e18_5_s1
 ```
 
 ### 2) 仅运行部分阶段
@@ -33,9 +31,9 @@ python run_pipeline.py --dataset misar_e18-5-s1
 `--steps` 逗号分隔，可选 `preprocess`, `train`, `evaluate`。
 
 ```bash
-python run_pipeline.py --dataset misar_e18-5-s1 --steps preprocess
-python run_pipeline.py --dataset misar_e18-5-s1 --steps preprocess,train
-python run_pipeline.py --dataset misar_e18-5-s1 --steps evaluate
+python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
+python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess,train
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate
 ```
 
 ### 3) 评估阶段附加参数
@@ -44,41 +42,48 @@ python run_pipeline.py --dataset misar_e18-5-s1 --steps evaluate
 - `--n-clusters`: 指定 mclust 聚类簇数（不传时默认使用配置文件 `eval.n_clusters`，默认 7）。
 
 ```bash
-python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.pth
-python run_pipeline.py --dataset mouse --steps evaluate --checkpoint ckpt_best.pth --n-clusters 7
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-## MISAR 新数据集运行命令
+## e18.5 常用命令
 
-### 全流程（分别运行）
+### 全流程
 
 ```bash
-python run_pipeline.py --dataset misar_e11_0-s1
-python run_pipeline.py --dataset misar_e11_0-s2
-python run_pipeline.py --dataset misar_e13_5-s1
-python run_pipeline.py --dataset misar_e13_5-s2
-python run_pipeline.py --dataset misar_e15-5-s1
-python run_pipeline.py --dataset misar_e15-5-s2
-python run_pipeline.py --dataset misar_e18-5-s1
-python run_pipeline.py --dataset misar_e18-5-s2
+python run_pipeline.py --dataset misar_e18_5_s1
 ```
 
 ### 仅预处理 / 仅训练 / 仅评估（示例）
 
 ```bash
 # preprocess
-python run_pipeline.py --dataset misar_e18_5-s1 --steps preprocess
+python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
 
 # train
-python run_pipeline.py --dataset misar_e18_5-s1 --steps train
+python run_pipeline.py --dataset misar_e18_5_s1 --steps train
 
 # evaluate
-python run_pipeline.py --dataset misar_e18_5-s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 7
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+### 单阶段确定性启动（推荐）
+
+```bash
+./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_train.py
+./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
+
+```bash
+SEED_OVERRIDE=123 ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_train.py
 ```
 
 ### 兼容别名
 
-`--dataset misar_e18` 仍可使用，默认指向 `misar_e18-5-s1` 配置。
+`--dataset misar_e18` 仍可使用，默认指向 `misar_e18_5_s1` 配置。
 
 ## 范围评估（可选）
 
@@ -108,7 +113,7 @@ python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start
 - `configs/config_misar_e15_5_s2.yaml`
 - `configs/config_misar_e18_5_s1.yaml`
 - `configs/config_misar_e18_5_s2.yaml`
-- `configs/config_misar_e18.yaml`（兼容别名配置，指向 e18-5-s1）
+- `configs/config_misar_e18.yaml`（兼容别名配置，指向 e18_5_s1）
 
 ## 目录约定
 

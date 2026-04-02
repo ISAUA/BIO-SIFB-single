@@ -106,7 +106,7 @@ def filter_peaks_by_tss(adata, gtf_path, rna_genes, window=100000, n_final=30000
     
     # 1. 准备 GTF 数据
     gene_tss = parse_gtf_tss(gtf_path)
-    target_genes = set(rna_genes) & set(gene_tss.keys())
+    target_genes = sorted(set(rna_genes) & set(gene_tss.keys()))
     print(f"Matching {len(target_genes)} RNA genes to Peaks...")
     
     if len(target_genes) == 0:

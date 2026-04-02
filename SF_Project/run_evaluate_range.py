@@ -203,6 +203,7 @@ def visualize_and_save(
     moran_k=6,
     plot_cfg=None,
     checkpoint_name=None,
+    seed=42,
 ):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
@@ -214,33 +215,27 @@ def visualize_and_save(
     coords_plot[:, 1] = -1.0 * coords_plot[:, 1]
     adata.obsm["spatial"] = coords_plot
 
-    sc.pp.neighbors(adata, use_rep="X")
-    sc.tl.umap(adata)
+    sc.pp.neighbors(adata, use_rep="X", random_state=int(seed))
+    sc.tl.umap(adata, random_state=int(seed))
 
-    try:
-        ensure_r_runtime_available()
-        import rpy2.robjects as robjects
-        import rpy2.robjects.numpy2ri
+    ensure_r_runtime_available()
+    import rpy2.robjects as robjects
+    import rpy2.robjects.numpy2ri
 
-        rpy2.robjects.numpy2ri.activate()
-        robjects.r["set.seed"](42)
-        robjects.r('suppressPackageStartupMessages(library(mclust))')
-        rmclust = robjects.r["Mclust"]
+    rpy2.robjects.numpy2ri.activate()
+    robjects.r["set.seed"](int(seed))
+    robjects.r('suppressPackageStartupMessages(library(mclust))')
+    rmclust = robjects.r["Mclust"]
 
-        # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
-        pca_target_dim = max(1, int(mclust_pca_dim))
-        pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
-        pca_model = PCA(n_components=pca_dim, random_state=42)
-        z_pca = pca_model.fit_transform(z_final)
+    # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
+    pca_target_dim = max(1, int(mclust_pca_dim))
+    pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
+    pca_model = PCA(n_components=pca_dim, random_state=int(seed))
+    z_pca = pca_model.fit_transform(z_final)
 
-        res = rmclust(rpy2.robjects.numpy2ri.numpy2rpy(z_pca), int(n_clusters), "EEE")
-        mclust_res = extract_mclust_labels(res)
-        adata.obs["cluster"] = mclust_res
-    except Exception as e:
-        if logger is not None:
-            logger.warning("mclust failed (%s), falling back to Leiden.", str(e))
-        sc.tl.leiden(adata, resolution=1.0, key_added="cluster")
-        adata.obs["cluster"] = adata.obs["cluster"].astype(int) + 1
+    res = rmclust(rpy2.robjects.numpy2ri.numpy2rpy(z_pca), int(n_clusters), "EEE")
+    mclust_res = extract_mclust_labels(res)
+    adata.obs["cluster"] = mclust_res
 
     adata.obs["cluster"] = adata.obs["cluster"].astype(int).astype(str).astype("category")
     cluster_list = sorted(adata.obs["cluster"].unique(), key=lambda x: int(x))
@@ -399,6 +394,7 @@ def main():
 
     config = load_config(args.config)
     set_seed(config["project"].get("seed", 42))
+    seed = int(config["project"].get("seed", 42))
 
     processed_dir = config["data"]["processed_path"]
     save_dir = config["project"]["save_dir"]
@@ -482,6 +478,7 @@ def main():
             moran_k=moran_k,
             plot_cfg=plot_cfg,
             checkpoint_name=ckpt_name,
+            seed=seed,
         )
 
         logger.info("Artifacts (%s): %s | %s", suffix, plot_path, h5ad_path)

@@ -9,14 +9,14 @@ import yaml
 DATASET_CONFIG = {
     "human": "configs/config_human.yaml",
     "mouse": "configs/config_mouse.yaml",
-    "misar_e11_0-s1": "configs/config_misar_e11_0_s1.yaml",
-    "misar_e11_0-s2": "configs/config_misar_e11_0_s2.yaml",
-    "misar_e13_5-s1": "configs/config_misar_e13_5_s1.yaml",
-    "misar_e13_5-s2": "configs/config_misar_e13_5_s2.yaml",
-    "misar_e15-5-s1": "configs/config_misar_e15_5_s1.yaml",
-    "misar_e15-5-s2": "configs/config_misar_e15_5_s2.yaml",
-    "misar_e18-5-s1": "configs/config_misar_e18_5_s1.yaml",
-    "misar_e18-5-s2": "configs/config_misar_e18_5_s2.yaml",
+    "misar_e11_0_s1": "configs/config_misar_e11_0_s1.yaml",
+    "misar_e11_0_s2": "configs/config_misar_e11_0_s2.yaml",
+    "misar_e13_5_s1": "configs/config_misar_e13_5_s1.yaml",
+    "misar_e13_5_s2": "configs/config_misar_e13_5_s2.yaml",
+    "misar_e15_5_s1": "configs/config_misar_e15_5_s1.yaml",
+    "misar_e15_5_s2": "configs/config_misar_e15_5_s2.yaml",
+    "misar_e18_5_s1": "configs/config_misar_e18_5_s1.yaml",
+    "misar_e18_5_s2": "configs/config_misar_e18_5_s2.yaml",
     "misar_e18": "configs/config_misar_e18.yaml",
 }
 
@@ -68,11 +68,24 @@ def append_log_separator(log_path):
         f.write("\n" + "=" * 88 + "\n")
 
 
-def run_cmd(label, cmd, logger=None):
+def build_deterministic_env(seed):
+    env = os.environ.copy()
+    seed = str(int(seed))
+    env["PYTHONHASHSEED"] = seed
+    env["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
+    env["OMP_NUM_THREADS"] = "1"
+    env["MKL_NUM_THREADS"] = "1"
+    env["OPENBLAS_NUM_THREADS"] = "1"
+    env["NUMEXPR_NUM_THREADS"] = "1"
+    env["NVIDIA_TF32_OVERRIDE"] = "0"
+    return env
+
+
+def run_cmd(label, cmd, seed, logger=None):
     print(f"\n===== {label}: {' '.join(cmd)} =====")
     if logger is not None:
-        logger.info("Step start: %s", label)
-    env = os.environ.copy()
+        logger.info("Step start: %s | seed=%d", label, int(seed))
+    env = build_deterministic_env(seed)
     env["SF_PIPELINE_RUN"] = "1"
     result = subprocess.run(cmd, env=env)
     if result.returncode != 0:
@@ -93,10 +106,12 @@ def main():
     config_path = DATASET_CONFIG[args.dataset]
     base_dir = os.path.abspath(os.path.dirname(__file__))
     config = load_config(os.path.join(base_dir, config_path))
+    seed = int(os.environ.get("SEED_OVERRIDE", config['project'].get('seed', 42)))
     save_dir = config['project']['save_dir']
     log_path = resolve_train_log_path(save_dir)
     logger = setup_logger(log_path)
     logger.info("Pipeline start: dataset=%s", args.dataset)
+    logger.info("Deterministic seed=%d", seed)
     logger.info("Config:\n%s", yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
 
     requested_steps = [s.strip() for s in args.steps.split(',') if s.strip()]
@@ -137,7 +152,7 @@ def main():
 
     try:
         for name, cmd in steps:
-            run_cmd(name, cmd, logger=logger)
+            run_cmd(name, cmd, seed=seed, logger=logger)
         logger.info("Pipeline finished successfully.")
     finally:
         append_log_separator(log_path)

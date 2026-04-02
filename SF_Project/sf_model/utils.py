@@ -193,7 +193,7 @@ def set_seed(seed: int = 42, deterministic: bool = True):
     torch.backends.cudnn.allow_tf32 = False
 
     try:
-        torch.use_deterministic_algorithms(True, warn_only=True)
+        torch.use_deterministic_algorithms(True, warn_only=False)
     except TypeError:
         torch.use_deterministic_algorithms(True)
 

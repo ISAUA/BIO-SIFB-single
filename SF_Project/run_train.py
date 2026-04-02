@@ -92,6 +92,17 @@ def main():
     # 以预处理后的实际维度覆盖配置，避免 PCA 维度变更导致不匹配
     config['model']['rna_in_dim'] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim)
+
+    # --- 新增用于排查的测试代码 ---
+    test_weight_path = os.path.join(config['project']['save_dir'], "init_weights_test.pth")
+    if not os.path.exists(test_weight_path):
+        torch.save(model.state_dict(), test_weight_path)
+        print(f"已保存第一次运行的初始权重至: {test_weight_path}")
+    else:
+        test_weight_path_2 = test_weight_path.replace(".pth", "_2.pth")
+        torch.save(model.state_dict(), test_weight_path_2)
+        print(f"已保存第二次运行的初始权重至: {test_weight_path_2}")
+    # ------------------------------
     
     # 4. 初始化训练器
     trainer = SFTrainer(model, config)

@@ -1,5 +1,37 @@
+# ------------------------------
+# Python cache and env
+# ------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# ------------------------------
+# Dataset / artifacts (do not upload)
+# ------------------------------
+SF_Project/data/
+SF_Project/results/
+SF_Project/diagnostics/
+
+# ------------------------------
+# Large/binary outputs (do not upload)
+# ------------------------------
 *.h5ad
 *.pth
 *.pt
-data/
-__pycache__/
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.mtx
+*.tsv
+
+# ------------------------------
+# Runtime logs
+# ------------------------------
+*.log

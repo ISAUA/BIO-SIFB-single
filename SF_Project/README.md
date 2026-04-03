@@ -17,8 +17,11 @@ pip install -r requirements.txt
 ## 快速开始
 
 ### 0) 进入环境和文件夹
+```bash
+source ~/.bashrc
 conda activate sc_bridge
 cd SF_Project
+```
 
 ### 1) 全流程运行
 
@@ -99,6 +102,26 @@ python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start
 - 当轮次等于 `--best-epoch` 时，自动使用 `ckpt_best.pth`。
 - PDF 输出在 `results/misar/<dataset>/figures/`，h5ad 输出在 `results/misar/<dataset>/predictions/`（MISAR 数据集）。
 
+## e15.5 自动调参（数据集隔离）
+
+说明：该流程会自动管理 `KNN` 与 `ino_pre_smooth_alpha`，并固定 `ino_use_edge_weight=true`、`ino_pre_smooth_enable=true`。
+
+```bash
+source ~/.bashrc
+conda activate sc_bridge
+cd SF_Project
+python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --knn-list 8,9,10 --alpha-list 0.7,0.8,0.9
+```
+
+可选参数示例：
+
+```bash
+python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --max-runs 1
+python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --skip-existing
+```
+
+全局实验追踪 CSV：`results/experiments_global.csv`。
+
 ## 数据集配置文件
 
 数据集映射定义在 `run_pipeline.py` 的 `DATASET_CONFIG`。
@@ -118,6 +141,8 @@ python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start
 ## 目录约定
 
 - MISAR 原始数据：`data/raw/misar/<dataset>/`
-- MISAR 预处理结果：`data/processed/misar/<dataset>/processed_data.pt`
-- MISAR 训练输出：`results/misar/<dataset>/checkpoints/`
-- MISAR 评估输出：`results/misar/<dataset>/predictions/` 与 `results/misar/<dataset>/figures/`
+- 数据集隔离调优配置：`configs/<dataset_tag>/config_tune_*.yaml`
+- 数据集隔离预处理产物：`data/processed/<dataset_tag>/tuning/<trial_id>/`
+- 数据集隔离结果输出：`results/<dataset_tag>/tuning/<trial_id>/`
+- e18.5 历史调优结果：`results/e18_5_s1/tuning/`
+- 全局实验追踪：`results/experiments_global.csv`

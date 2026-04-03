@@ -1,9 +1,9 @@
 project:                              # 项目级配置
-  name: "SF_MISAR_E15_5_S1_Analysis"                    # 项目名称
+  name: "TUNE_e1"
   version: "1.0.0"                   # 配置版本
   seed: 42                            # 随机种子
-  save_dir: "./results/e15_5_s1/base/checkpoints/"   # 训练 checkpoint 输出目录
-  eval_dir: "./results/e15_5_s1/base/predictions/"   # 评估输出目录
+  save_dir: "./results/e18_5_s1/tuning/e1/checkpoints/"   # 训练 checkpoint 输出目录
+  eval_dir: "./results/e18_5_s1/tuning/e1/predictions/"   # 评估输出目录
 
 eval:                                 # 评估配置
   checkpoint: "best"                 # 默认评估 checkpoint key
@@ -25,8 +25,8 @@ eval:                                 # 评估配置
     final: "ckpt_300.pth"            # 最终/指定轮次 checkpoint 文件名
 
 data:                                 # 数据配置
-  raw_path: "data/raw/misar/misar_e15-5-s1"    # 原始数据目录
-  processed_path: "data/processed/e15_5_s1/base"  # 预处理输出目录
+  raw_path: "data/raw/misar/misar_e18-5-s1"    # 原始数据目录
+  processed_path: "data/processed/e18_5_s1/tuning/e1"  # 预处理输出目录
   files:                              # 原始文件定义
     rna_h5ad: "adata_RNA.h5ad"        # RNA h5ad 文件名
     atac_h5ad: "adata_Peak.h5ad"      # ATAC h5ad 文件名
@@ -52,7 +52,7 @@ data:                                 # 数据配置
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
-  name: "SFNet"                      # 模型名称
+  name: "TUNE_e1"
   rna_in_dim: 3000                    # RNA 输入维度
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
@@ -65,8 +65,8 @@ model:                                # 模型结构配置
   sfib_dim: 128                       # SFIB 特征维度
   sfib_ino_layers: 2                  # SFIB INO 层数
   ino_use_edge_weight: true          # INO 是否使用边权重（false 时仅用拓扑）
-  ino_pre_smooth_enable: true        # INO 前是否启用预平滑
-  ino_pre_smooth_alpha: 0.8          # 预平滑保真系数 alpha（禁用预平滑时该值不生效）
+  ino_pre_smooth_enable: false        # INO 前是否启用预平滑
+  ino_pre_smooth_alpha: 1.0           # 预平滑保真系数 alpha（禁用预平滑时该值不生效）
   proj_hidden_dim: 64                 # 对比投影头隐藏维度
   proj_output_dim: 64                 # 对比投影头输出维度
   rna_dec_hidden: 512                 # RNA 解码器隐藏维度

@@ -1,0 +1,102 @@
+project:
+  name: TUNE_e15_5_s1_k10_a0p8
+  version: 1.0.0
+  seed: 42
+  save_dir: ./results/e15_5_s1/tuning/k10_a0p8/checkpoints/
+  eval_dir: ./results/e15_5_s1/tuning/k10_a0p8/predictions/
+eval:
+  checkpoint: best
+  n_clusters: 14
+  mclust_pca_dim: 20
+  resolution: 0.9
+  moran_k: 6
+  plotting:
+    figure_dpi: 180
+    figure_size:
+    - 14
+    - 6
+    panel_size:
+    - 6
+    - 6
+    umap_point_size: 60
+    spatial_point_size: 80
+    alpha: 1.0
+    legend_loc: on data
+    palette_mode: high_contrast
+  checkpoints:
+    best: ckpt_best.pth
+    final: ckpt_300.pth
+data:
+  raw_path: data/raw/misar/misar_e15-5-s1
+  processed_path: data/processed/e15_5_s1/tuning/k10_a0p8
+  files:
+    rna_h5ad: adata_RNA.h5ad
+    atac_h5ad: adata_Peak.h5ad
+    gtf: ../gencode.vM23.annotation.gtf.gz
+  parameters:
+    reduce:
+      mode: cpu
+      device: auto
+      q_offset: 8
+      niter: 3
+    n_top_genes: 3000
+    rna_pca_dim: 512
+    rna_min_cells: 3
+    rna_target_sum: 1e4
+    n_global_peaks: 50000
+    n_final_peaks: 30000
+    atac_pca_dim: 512
+    atac_min_cells: 50
+    atac_target_sum: 1e4
+    tfidf_eps: 1e-6
+    tss_window: 150000
+    knn_k: 10
+    ground_truth_key: Combined_Clusters
+model:
+  name: SFNet
+  rna_in_dim: 3000
+  hidden_dim: 512
+  rna_n_heads: 4
+  rna_dropout: 0.1
+  atac_dropout: 0.1
+  n_heads: 4
+  dropout: 0.1
+  grid_size: 128
+  latent_dim: 50
+  sfib_dim: 128
+  sfib_ino_layers: 2
+  ino_use_edge_weight: true
+  ino_pre_smooth_enable: true
+  ino_pre_smooth_alpha: 0.8
+  proj_hidden_dim: 64
+  proj_output_dim: 64
+  rna_dec_hidden: 512
+  rna_dec_blocks: 1
+  atac_dec_hidden: 512
+  atac_dec_blocks: 1
+  sfib_debug_mode: false
+  model.sfib_debug_epochs:
+  - 1
+  - 10
+  - 20
+  model.sfib_debug_every_n_epochs: 20
+train:
+  epochs: 3000
+  batch_size: 1
+  learning_rate: 1e-3
+  learning_rate_low: 1e-4
+  lr_switch_epoch: 2000
+  weight_decay: 1e-4
+  lambda_rna: 5.0
+  lambda_atac: 1.0
+  lambda_clip: 0.5
+  fade_start_epoch: 2000
+  fade_end_epoch: 2500
+  pos_weight_rna: 10.0
+  pos_weight_atac: 20.0
+  clip_temperature: 0.5
+  save_every: 50
+  device: cuda
+  log_interval: 10
+  log_tail_blank_lines: 5
+  best_name: ckpt_best.pth

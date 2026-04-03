@@ -73,15 +73,15 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ck
 ### 单阶段确定性启动（推荐）
 
 ```bash
-./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_preprocess.py
-./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_train.py
-./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
 可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
 
 ```bash
-SEED_OVERRIDE=123 ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_train.py
+SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
 ```
 
 ### 兼容别名
@@ -93,7 +93,7 @@ SEED_OVERRIDE=123 ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_
 当你需要一次性评估一段轮次（例如 1500-2000）时：
 
 ```bash
-python run_evaluate_range.py --config configs/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
+python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
 ```
 
 说明：
@@ -124,19 +124,32 @@ python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --skip-existing
 
 ## 数据集配置文件
 
-数据集映射定义在 `run_pipeline.py` 的 `DATASET_CONFIG`。
+数据集映射实现位于 `scripts/pipeline/run_pipeline.py` 的 `DATASET_CONFIG`。
+
+## 脚本目录整理
+
+为减少根目录复杂度，入口脚本已按功能归并到 `scripts/`：
+
+- `scripts/pipeline/`：预处理、训练、评估、范围评估、总流程
+- `scripts/tuning/`：自动调参脚本
+- `scripts/diagnostics/`：诊断脚本
+
+兼容性说明：
+
+- 根目录仍保留同名启动脚本（如 `run_pipeline.py`、`run_train.py`），它们会转发到 `scripts/` 下的实现。
+- 因此你现有命令无需修改。
 
 - `configs/config_human.yaml`
 - `configs/config_mouse.yaml`
-- `configs/config_misar_e11_0_s1.yaml`
-- `configs/config_misar_e11_0_s2.yaml`
-- `configs/config_misar_e13_5_s1.yaml`
-- `configs/config_misar_e13_5_s2.yaml`
-- `configs/config_misar_e15_5_s1.yaml`
-- `configs/config_misar_e15_5_s2.yaml`
-- `configs/config_misar_e18_5_s1.yaml`
-- `configs/config_misar_e18_5_s2.yaml`
-- `configs/config_misar_e18.yaml`（兼容别名配置，指向 e18_5_s1）
+- `configs/e11_0_s1/config_misar_e11_0_s1.yaml`
+- `configs/e11_0_s2/config_misar_e11_0_s2.yaml`
+- `configs/e13_5_s1/config_misar_e13_5_s1.yaml`
+- `configs/e13_5_s2/config_misar_e13_5_s2.yaml`
+- `configs/e15_5_s1/config_misar_e15_5_s1.yaml`
+- `configs/e15_5_s2/config_misar_e15_5_s2.yaml`
+- `configs/e18_5_s1/config_misar_e18_5_s1.yaml`
+- `configs/e18_5_s2/config_misar_e18_5_s2.yaml`
+- `configs/e18_5_s1/config_misar_e18.yaml`（兼容别名配置，指向 e18_5_s1）
 
 ## 目录约定
 

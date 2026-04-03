@@ -4,9 +4,9 @@ set -euo pipefail
 # Usage:
 #   ./run_deterministic.sh <config_yaml> <python_script> [extra args...]
 # Example:
-#   ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_preprocess.py
-#   ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_train.py
-#   ./run_deterministic.sh configs/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint best --n-clusters 14
+#   ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_preprocess.py
+#   ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
+#   ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint best --n-clusters 14
 
 if [[ $# -lt 2 ]]; then
   echo "Usage: $0 <config_yaml> <python_script> [extra args...]" >&2

@@ -1,0 +1,401 @@
+2026-04-03 09:54:57,374 | INFO | SFPreprocess | [Phase 1] Starting Data Preprocessing...
+2026-04-03 09:54:57,375 | INFO | SFPreprocess | Loading raw data...
+2026-04-03 09:54:57,375 | INFO | SFPreprocess | Data loader: paired h5ad
+2026-04-03 09:55:35,503 | INFO | SFPreprocess | Aligned final cells: RNA=2129, ATAC=2129
+2026-04-03 09:55:58,218 | INFO | SFPreprocess | Reduced shapes: RNA=(2129, 512), ATAC=(2129, 512)
+2026-04-03 09:56:01,159 | INFO | SFPreprocess | Saving processed tensors...
+2026-04-03 09:56:01,198 | INFO | SFPreprocess | Preprocessing complete: data/processed/tuning/e13/processed_data.pt
+
+========================================================================================
+2026-04-03 09:56:07,784 | INFO | SFTrainer | [Phase 2] Starting Model Training...
+2026-04-03 09:56:07,784 | INFO | SFTrainer | Loading processed data...
+2026-04-03 09:56:07,810 | INFO | SFTrainer | Data ready: RNA=torch.Size([2129, 512]), ATAC=torch.Size([2129, 512]), edges=19161
+2026-04-03 09:56:07,810 | INFO | SFTrainer | Initializing model...
+2026-04-03 09:56:08,147 | INFO | SFTrainer | Training started.
+2026-04-03 09:56:08,147 | INFO | SFTrainer | Training started: epochs=3000
+2026-04-03 09:56:10,066 | INFO | SFTrainer | Epoch 010 | total 71.4325 | rec_rna 8.6882 | rec_atac 24.1651 | clip 7.6529 | clip_weight 0.5000 | lr 1.00e-03 | best 71.4325
+2026-04-03 09:56:11,186 | INFO | SFTrainer | Epoch 020 | total 67.2436 | rec_rna 8.4454 | rec_atac 21.2111 | clip 7.6114 | clip_weight 0.5000 | lr 1.00e-03 | best 67.2436
+2026-04-03 09:56:12,308 | INFO | SFTrainer | Epoch 030 | total 65.8193 | rec_rna 8.3760 | rec_atac 20.1977 | clip 7.4834 | clip_weight 0.5000 | lr 1.00e-03 | best 65.8193
+2026-04-03 09:56:13,420 | INFO | SFTrainer | Epoch 040 | total 65.1884 | rec_rna 8.3143 | rec_atac 19.9807 | clip 7.2725 | clip_weight 0.5000 | lr 1.00e-03 | best 65.1884
+2026-04-03 09:56:14,536 | INFO | SFTrainer | Epoch 050 | total 63.8861 | rec_rna 8.2279 | rec_atac 19.2054 | clip 7.0826 | clip_weight 0.5000 | lr 1.00e-03 | best 63.8861
+2026-04-03 09:56:15,704 | INFO | SFTrainer | Epoch 060 | total 62.2805 | rec_rna 8.0948 | rec_atac 18.3492 | clip 6.9145 | clip_weight 0.5000 | lr 1.00e-03 | best 62.2805
+2026-04-03 09:56:16,871 | INFO | SFTrainer | Epoch 070 | total 60.9862 | rec_rna 7.9714 | rec_atac 17.7282 | clip 6.8025 | clip_weight 0.5000 | lr 1.00e-03 | best 60.9862
+2026-04-03 09:56:18,041 | INFO | SFTrainer | Epoch 080 | total 59.8902 | rec_rna 7.8764 | rec_atac 17.1689 | clip 6.6783 | clip_weight 0.5000 | lr 1.00e-03 | best 59.8902
+2026-04-03 09:56:19,206 | INFO | SFTrainer | Epoch 090 | total 58.9211 | rec_rna 7.7760 | rec_atac 16.7443 | clip 6.5939 | clip_weight 0.5000 | lr 1.00e-03 | best 58.9211
+2026-04-03 09:56:20,349 | INFO | SFTrainer | Epoch 100 | total 58.0335 | rec_rna 7.6746 | rec_atac 16.3985 | clip 6.5235 | clip_weight 0.5000 | lr 1.00e-03 | best 58.0335
+2026-04-03 09:56:21,531 | INFO | SFTrainer | Epoch 110 | total 57.1733 | rec_rna 7.5611 | rec_atac 16.1320 | clip 6.4718 | clip_weight 0.5000 | lr 1.00e-03 | best 57.1733
+2026-04-03 09:56:22,705 | INFO | SFTrainer | Epoch 120 | total 56.3609 | rec_rna 7.4402 | rec_atac 15.9459 | clip 6.4279 | clip_weight 0.5000 | lr 1.00e-03 | best 56.3609
+2026-04-03 09:56:23,864 | INFO | SFTrainer | Epoch 130 | total 55.5339 | rec_rna 7.3155 | rec_atac 15.7623 | clip 6.3878 | clip_weight 0.5000 | lr 1.00e-03 | best 55.5339
+2026-04-03 09:56:25,009 | INFO | SFTrainer | Epoch 140 | total 54.6301 | rec_rna 7.1733 | rec_atac 15.5860 | clip 6.3555 | clip_weight 0.5000 | lr 1.00e-03 | best 54.6301
+2026-04-03 09:56:26,157 | INFO | SFTrainer | Epoch 150 | total 53.7994 | rec_rna 7.0398 | rec_atac 15.4348 | clip 6.3309 | clip_weight 0.5000 | lr 1.00e-03 | best 53.7994
+2026-04-03 09:56:27,310 | INFO | SFTrainer | Epoch 160 | total 52.8870 | rec_rna 6.8956 | rec_atac 15.2585 | clip 6.3006 | clip_weight 0.5000 | lr 1.00e-03 | best 52.8870
+2026-04-03 09:56:28,488 | INFO | SFTrainer | Epoch 170 | total 52.0727 | rec_rna 6.7670 | rec_atac 15.0999 | clip 6.2758 | clip_weight 0.5000 | lr 1.00e-03 | best 52.0727
+2026-04-03 09:56:29,593 | INFO | SFTrainer | Epoch 180 | total 51.2830 | rec_rna 6.6434 | rec_atac 14.9398 | clip 6.2522 | clip_weight 0.5000 | lr 1.00e-03 | best 51.2830
+2026-04-03 09:56:30,725 | INFO | SFTrainer | Epoch 190 | total 50.4445 | rec_rna 6.5138 | rec_atac 14.7596 | clip 6.2321 | clip_weight 0.5000 | lr 1.00e-03 | best 50.4445
+2026-04-03 09:56:31,855 | INFO | SFTrainer | Epoch 200 | total 49.6942 | rec_rna 6.3947 | rec_atac 14.6073 | clip 6.2268 | clip_weight 0.5000 | lr 1.00e-03 | best 49.6942
+2026-04-03 09:56:33,015 | INFO | SFTrainer | Epoch 210 | total 48.9075 | rec_rna 6.2760 | rec_atac 14.4412 | clip 6.1729 | clip_weight 0.5000 | lr 1.00e-03 | best 48.9075
+2026-04-03 09:56:34,145 | INFO | SFTrainer | Epoch 220 | total 48.0984 | rec_rna 6.1486 | rec_atac 14.2715 | clip 6.1682 | clip_weight 0.5000 | lr 1.00e-03 | best 48.0984
+2026-04-03 09:56:35,243 | INFO | SFTrainer | Epoch 230 | total 47.3807 | rec_rna 6.0405 | rec_atac 14.1129 | clip 6.1301 | clip_weight 0.5000 | lr 1.00e-03 | best 47.3807
+2026-04-03 09:56:36,446 | INFO | SFTrainer | Epoch 240 | total 46.7166 | rec_rna 5.9420 | rec_atac 13.9477 | clip 6.1176 | clip_weight 0.5000 | lr 1.00e-03 | best 46.7166
+2026-04-03 09:56:37,577 | INFO | SFTrainer | Epoch 250 | total 45.9718 | rec_rna 5.8338 | rec_atac 13.7636 | clip 6.0780 | clip_weight 0.5000 | lr 1.00e-03 | best 45.9718
+2026-04-03 09:56:38,720 | INFO | SFTrainer | Epoch 260 | total 45.3089 | rec_rna 5.7360 | rec_atac 13.5916 | clip 6.0746 | clip_weight 0.5000 | lr 1.00e-03 | best 45.3089
+2026-04-03 09:56:39,842 | INFO | SFTrainer | Epoch 270 | total 44.6560 | rec_rna 5.6361 | rec_atac 13.4552 | clip 6.0409 | clip_weight 0.5000 | lr 1.00e-03 | best 44.6560
+2026-04-03 09:56:40,947 | INFO | SFTrainer | Epoch 280 | total 44.0291 | rec_rna 5.5544 | rec_atac 13.2417 | clip 6.0312 | clip_weight 0.5000 | lr 1.00e-03 | best 44.0178
+2026-04-03 09:56:42,057 | INFO | SFTrainer | Epoch 290 | total 43.3958 | rec_rna 5.4667 | rec_atac 13.0685 | clip 5.9881 | clip_weight 0.5000 | lr 1.00e-03 | best 43.3829
+2026-04-03 09:56:43,154 | INFO | SFTrainer | Epoch 300 | total 42.7203 | rec_rna 5.3718 | rec_atac 12.8782 | clip 5.9665 | clip_weight 0.5000 | lr 1.00e-03 | best 42.7203
+2026-04-03 09:56:44,293 | INFO | SFTrainer | Epoch 310 | total 42.1163 | rec_rna 5.2907 | rec_atac 12.6847 | clip 5.9566 | clip_weight 0.5000 | lr 1.00e-03 | best 42.1163
+2026-04-03 09:56:45,407 | INFO | SFTrainer | Epoch 320 | total 41.4791 | rec_rna 5.2073 | rec_atac 12.4761 | clip 5.9333 | clip_weight 0.5000 | lr 1.00e-03 | best 41.4791
+2026-04-03 09:56:46,544 | INFO | SFTrainer | Epoch 330 | total 40.9531 | rec_rna 5.1456 | rec_atac 12.2784 | clip 5.8939 | clip_weight 0.5000 | lr 1.00e-03 | best 40.9531
+2026-04-03 09:56:47,697 | INFO | SFTrainer | Epoch 340 | total 40.4546 | rec_rna 5.0772 | rec_atac 12.1280 | clip 5.8816 | clip_weight 0.5000 | lr 1.00e-03 | best 40.4546
+2026-04-03 09:56:48,794 | INFO | SFTrainer | Epoch 350 | total 39.8891 | rec_rna 5.0074 | rec_atac 11.9267 | clip 5.8504 | clip_weight 0.5000 | lr 1.00e-03 | best 39.8891
+2026-04-03 09:56:49,949 | INFO | SFTrainer | Epoch 360 | total 39.3876 | rec_rna 4.9471 | rec_atac 11.7422 | clip 5.8195 | clip_weight 0.5000 | lr 1.00e-03 | best 39.3876
+2026-04-03 09:56:50,989 | INFO | SFTrainer | Epoch 370 | total 39.0082 | rec_rna 4.9019 | rec_atac 11.5800 | clip 5.8372 | clip_weight 0.5000 | lr 1.00e-03 | best 38.9432
+2026-04-03 09:56:52,110 | INFO | SFTrainer | Epoch 380 | total 38.5699 | rec_rna 4.8494 | rec_atac 11.4227 | clip 5.8004 | clip_weight 0.5000 | lr 1.00e-03 | best 38.5493
+2026-04-03 09:56:53,201 | INFO | SFTrainer | Epoch 390 | total 38.0749 | rec_rna 4.7927 | rec_atac 11.2305 | clip 5.7615 | clip_weight 0.5000 | lr 1.00e-03 | best 38.0585
+2026-04-03 09:56:54,287 | INFO | SFTrainer | Epoch 400 | total 37.6303 | rec_rna 4.7354 | rec_atac 11.0792 | clip 5.7477 | clip_weight 0.5000 | lr 1.00e-03 | best 37.6147
+2026-04-03 09:56:55,390 | INFO | SFTrainer | Epoch 410 | total 37.1837 | rec_rna 4.6881 | rec_atac 10.8771 | clip 5.7322 | clip_weight 0.5000 | lr 1.00e-03 | best 37.1609
+2026-04-03 09:56:56,513 | INFO | SFTrainer | Epoch 420 | total 36.7607 | rec_rna 4.6338 | rec_atac 10.7448 | clip 5.6939 | clip_weight 0.5000 | lr 1.00e-03 | best 36.7607
+2026-04-03 09:56:57,621 | INFO | SFTrainer | Epoch 430 | total 36.4224 | rec_rna 4.5919 | rec_atac 10.6191 | clip 5.6871 | clip_weight 0.5000 | lr 1.00e-03 | best 36.3937
+2026-04-03 09:56:58,637 | INFO | SFTrainer | Epoch 440 | total 36.0989 | rec_rna 4.5641 | rec_atac 10.4557 | clip 5.6456 | clip_weight 0.5000 | lr 1.00e-03 | best 36.0417
+2026-04-03 09:56:59,694 | INFO | SFTrainer | Epoch 450 | total 35.6852 | rec_rna 4.5083 | rec_atac 10.3273 | clip 5.6330 | clip_weight 0.5000 | lr 1.00e-03 | best 35.6852
+2026-04-03 09:57:00,727 | INFO | SFTrainer | Epoch 460 | total 35.3749 | rec_rna 4.4747 | rec_atac 10.1960 | clip 5.6110 | clip_weight 0.5000 | lr 1.00e-03 | best 35.3255
+2026-04-03 09:57:01,773 | INFO | SFTrainer | Epoch 470 | total 35.0224 | rec_rna 4.4347 | rec_atac 10.0526 | clip 5.5925 | clip_weight 0.5000 | lr 1.00e-03 | best 35.0224
+2026-04-03 09:57:02,805 | INFO | SFTrainer | Epoch 480 | total 34.7564 | rec_rna 4.3991 | rec_atac 9.9817 | clip 5.5584 | clip_weight 0.5000 | lr 1.00e-03 | best 34.6863
+2026-04-03 09:57:03,840 | INFO | SFTrainer | Epoch 490 | total 34.4384 | rec_rna 4.3668 | rec_atac 9.8375 | clip 5.5337 | clip_weight 0.5000 | lr 1.00e-03 | best 34.4384
+2026-04-03 09:57:04,947 | INFO | SFTrainer | Epoch 500 | total 34.0676 | rec_rna 4.3269 | rec_atac 9.6868 | clip 5.4923 | clip_weight 0.5000 | lr 1.00e-03 | best 34.0676
+2026-04-03 09:57:05,941 | INFO | SFTrainer | Epoch 510 | total 33.9374 | rec_rna 4.3105 | rec_atac 9.6379 | clip 5.4938 | clip_weight 0.5000 | lr 1.00e-03 | best 33.9175
+2026-04-03 09:57:07,003 | INFO | SFTrainer | Epoch 520 | total 33.6959 | rec_rna 4.2832 | rec_atac 9.5502 | clip 5.4588 | clip_weight 0.5000 | lr 1.00e-03 | best 33.6322
+2026-04-03 09:57:08,012 | INFO | SFTrainer | Epoch 530 | total 33.2980 | rec_rna 4.2348 | rec_atac 9.4111 | clip 5.4256 | clip_weight 0.5000 | lr 1.00e-03 | best 33.2980
+2026-04-03 09:57:08,974 | INFO | SFTrainer | Epoch 540 | total 33.1123 | rec_rna 4.2191 | rec_atac 9.3136 | clip 5.4068 | clip_weight 0.5000 | lr 1.00e-03 | best 33.1123
+2026-04-03 09:57:10,016 | INFO | SFTrainer | Epoch 550 | total 32.8768 | rec_rna 4.1921 | rec_atac 9.2224 | clip 5.3880 | clip_weight 0.5000 | lr 1.00e-03 | best 32.8413
+2026-04-03 09:57:11,068 | INFO | SFTrainer | Epoch 560 | total 32.7472 | rec_rna 4.1780 | rec_atac 9.1745 | clip 5.3652 | clip_weight 0.5000 | lr 1.00e-03 | best 32.6564
+2026-04-03 09:57:12,091 | INFO | SFTrainer | Epoch 570 | total 32.4799 | rec_rna 4.1494 | rec_atac 9.0661 | clip 5.3336 | clip_weight 0.5000 | lr 1.00e-03 | best 32.4799
+2026-04-03 09:57:13,044 | INFO | SFTrainer | Epoch 580 | total 32.2708 | rec_rna 4.1137 | rec_atac 9.0402 | clip 5.3244 | clip_weight 0.5000 | lr 1.00e-03 | best 32.2631
+2026-04-03 09:57:14,024 | INFO | SFTrainer | Epoch 590 | total 31.9742 | rec_rna 4.0782 | rec_atac 8.9281 | clip 5.3101 | clip_weight 0.5000 | lr 1.00e-03 | best 31.9742
+2026-04-03 09:57:14,947 | INFO | SFTrainer | Epoch 600 | total 31.8916 | rec_rna 4.0797 | rec_atac 8.8598 | clip 5.2665 | clip_weight 0.5000 | lr 1.00e-03 | best 31.8916
+2026-04-03 09:57:15,881 | INFO | SFTrainer | Epoch 610 | total 31.7349 | rec_rna 4.0548 | rec_atac 8.8331 | clip 5.2552 | clip_weight 0.5000 | lr 1.00e-03 | best 31.6897
+2026-04-03 09:57:16,867 | INFO | SFTrainer | Epoch 620 | total 31.5700 | rec_rna 4.0437 | rec_atac 8.7368 | clip 5.2295 | clip_weight 0.5000 | lr 1.00e-03 | best 31.5396
+2026-04-03 09:57:17,870 | INFO | SFTrainer | Epoch 630 | total 31.4124 | rec_rna 4.0256 | rec_atac 8.6750 | clip 5.2192 | clip_weight 0.5000 | lr 1.00e-03 | best 31.4124
+2026-04-03 09:57:18,932 | INFO | SFTrainer | Epoch 640 | total 31.2175 | rec_rna 4.0052 | rec_atac 8.6083 | clip 5.1668 | clip_weight 0.5000 | lr 1.00e-03 | best 31.2175
+2026-04-03 09:57:19,862 | INFO | SFTrainer | Epoch 650 | total 31.1067 | rec_rna 3.9892 | rec_atac 8.5781 | clip 5.1650 | clip_weight 0.5000 | lr 1.00e-03 | best 31.0464
+2026-04-03 09:57:20,850 | INFO | SFTrainer | Epoch 660 | total 30.9402 | rec_rna 3.9697 | rec_atac 8.5198 | clip 5.1442 | clip_weight 0.5000 | lr 1.00e-03 | best 30.8815
+2026-04-03 09:57:21,848 | INFO | SFTrainer | Epoch 670 | total 30.7927 | rec_rna 3.9577 | rec_atac 8.4602 | clip 5.0876 | clip_weight 0.5000 | lr 1.00e-03 | best 30.6905
+2026-04-03 09:57:22,719 | INFO | SFTrainer | Epoch 680 | total 30.7021 | rec_rna 3.9490 | rec_atac 8.4123 | clip 5.0899 | clip_weight 0.5000 | lr 1.00e-03 | best 30.6083
+2026-04-03 09:57:23,747 | INFO | SFTrainer | Epoch 690 | total 30.4184 | rec_rna 3.9136 | rec_atac 8.3320 | clip 5.0369 | clip_weight 0.5000 | lr 1.00e-03 | best 30.4184
+2026-04-03 09:57:24,665 | INFO | SFTrainer | Epoch 700 | total 30.3567 | rec_rna 3.9083 | rec_atac 8.3003 | clip 5.0300 | clip_weight 0.5000 | lr 1.00e-03 | best 30.3191
+2026-04-03 09:57:25,720 | INFO | SFTrainer | Epoch 710 | total 30.2284 | rec_rna 3.8906 | rec_atac 8.2817 | clip 4.9875 | clip_weight 0.5000 | lr 1.00e-03 | best 30.1780
+2026-04-03 09:57:26,681 | INFO | SFTrainer | Epoch 720 | total 30.0192 | rec_rna 3.8655 | rec_atac 8.1984 | clip 4.9867 | clip_weight 0.5000 | lr 1.00e-03 | best 30.0192
+2026-04-03 09:57:27,672 | INFO | SFTrainer | Epoch 730 | total 29.9080 | rec_rna 3.8539 | rec_atac 8.1631 | clip 4.9504 | clip_weight 0.5000 | lr 1.00e-03 | best 29.9080
+2026-04-03 09:57:28,569 | INFO | SFTrainer | Epoch 740 | total 29.8554 | rec_rna 3.8499 | rec_atac 8.1227 | clip 4.9664 | clip_weight 0.5000 | lr 1.00e-03 | best 29.7552
+2026-04-03 09:57:29,528 | INFO | SFTrainer | Epoch 750 | total 29.6604 | rec_rna 3.8285 | rec_atac 8.0623 | clip 4.9114 | clip_weight 0.5000 | lr 1.00e-03 | best 29.6604
+2026-04-03 09:57:30,550 | INFO | SFTrainer | Epoch 760 | total 29.6037 | rec_rna 3.8262 | rec_atac 8.0284 | clip 4.8886 | clip_weight 0.5000 | lr 1.00e-03 | best 29.5637
+2026-04-03 09:57:31,448 | INFO | SFTrainer | Epoch 770 | total 29.4569 | rec_rna 3.8072 | rec_atac 7.9882 | clip 4.8655 | clip_weight 0.5000 | lr 1.00e-03 | best 29.4373
+2026-04-03 09:57:32,375 | INFO | SFTrainer | Epoch 780 | total 29.3841 | rec_rna 3.8000 | rec_atac 7.9673 | clip 4.8335 | clip_weight 0.5000 | lr 1.00e-03 | best 29.3300
+2026-04-03 09:57:33,347 | INFO | SFTrainer | Epoch 790 | total 29.1346 | rec_rna 3.7714 | rec_atac 7.8913 | clip 4.7721 | clip_weight 0.5000 | lr 1.00e-03 | best 29.1346
+2026-04-03 09:57:34,221 | INFO | SFTrainer | Epoch 800 | total 29.1104 | rec_rna 3.7677 | rec_atac 7.8921 | clip 4.7596 | clip_weight 0.5000 | lr 1.00e-03 | best 29.0933
+2026-04-03 09:57:35,152 | INFO | SFTrainer | Epoch 810 | total 29.0411 | rec_rna 3.7610 | rec_atac 7.8637 | clip 4.7446 | clip_weight 0.5000 | lr 1.00e-03 | best 28.9442
+2026-04-03 09:57:36,044 | INFO | SFTrainer | Epoch 820 | total 28.9835 | rec_rna 3.7580 | rec_atac 7.8301 | clip 4.7263 | clip_weight 0.5000 | lr 1.00e-03 | best 28.8431
+2026-04-03 09:57:37,004 | INFO | SFTrainer | Epoch 830 | total 28.7890 | rec_rna 3.7304 | rec_atac 7.7885 | clip 4.6971 | clip_weight 0.5000 | lr 1.00e-03 | best 28.7565
+2026-04-03 09:57:37,973 | INFO | SFTrainer | Epoch 840 | total 28.7022 | rec_rna 3.7230 | rec_atac 7.7576 | clip 4.6595 | clip_weight 0.5000 | lr 1.00e-03 | best 28.7022
+2026-04-03 09:57:38,977 | INFO | SFTrainer | Epoch 850 | total 28.6683 | rec_rna 3.7214 | rec_atac 7.7312 | clip 4.6601 | clip_weight 0.5000 | lr 1.00e-03 | best 28.6066
+2026-04-03 09:57:39,939 | INFO | SFTrainer | Epoch 860 | total 28.3928 | rec_rna 3.6842 | rec_atac 7.6789 | clip 4.5858 | clip_weight 0.5000 | lr 1.00e-03 | best 28.3928
+2026-04-03 09:57:40,775 | INFO | SFTrainer | Epoch 870 | total 28.5112 | rec_rna 3.7077 | rec_atac 7.6809 | clip 4.5837 | clip_weight 0.5000 | lr 1.00e-03 | best 28.3928
+2026-04-03 09:57:41,737 | INFO | SFTrainer | Epoch 880 | total 28.2976 | rec_rna 3.6802 | rec_atac 7.6314 | clip 4.5307 | clip_weight 0.5000 | lr 1.00e-03 | best 28.2976
+2026-04-03 09:57:42,633 | INFO | SFTrainer | Epoch 890 | total 28.2847 | rec_rna 3.6752 | rec_atac 7.6524 | clip 4.5130 | clip_weight 0.5000 | lr 1.00e-03 | best 28.1994
+2026-04-03 09:57:43,558 | INFO | SFTrainer | Epoch 900 | total 28.1675 | rec_rna 3.6671 | rec_atac 7.5898 | clip 4.4840 | clip_weight 0.5000 | lr 1.00e-03 | best 28.1579
+2026-04-03 09:57:44,563 | INFO | SFTrainer | Epoch 910 | total 28.1343 | rec_rna 3.6686 | rec_atac 7.5642 | clip 4.4537 | clip_weight 0.5000 | lr 1.00e-03 | best 28.0962
+2026-04-03 09:57:45,466 | INFO | SFTrainer | Epoch 920 | total 28.1253 | rec_rna 3.6685 | rec_atac 7.5568 | clip 4.4519 | clip_weight 0.5000 | lr 1.00e-03 | best 28.0380
+2026-04-03 09:57:46,364 | INFO | SFTrainer | Epoch 930 | total 27.9563 | rec_rna 3.6428 | rec_atac 7.5242 | clip 4.4359 | clip_weight 0.5000 | lr 1.00e-03 | best 27.8581
+2026-04-03 09:57:47,224 | INFO | SFTrainer | Epoch 940 | total 27.9312 | rec_rna 3.6486 | rec_atac 7.5110 | clip 4.3543 | clip_weight 0.5000 | lr 1.00e-03 | best 27.8450
+2026-04-03 09:57:48,147 | INFO | SFTrainer | Epoch 950 | total 27.7891 | rec_rna 3.6311 | rec_atac 7.4564 | clip 4.3545 | clip_weight 0.5000 | lr 1.00e-03 | best 27.7750
+2026-04-03 09:57:49,059 | INFO | SFTrainer | Epoch 960 | total 27.7221 | rec_rna 3.6248 | rec_atac 7.4313 | clip 4.3331 | clip_weight 0.5000 | lr 1.00e-03 | best 27.6864
+2026-04-03 09:57:50,015 | INFO | SFTrainer | Epoch 970 | total 27.6316 | rec_rna 3.6082 | rec_atac 7.4504 | clip 4.2805 | clip_weight 0.5000 | lr 1.00e-03 | best 27.5907
+2026-04-03 09:57:50,892 | INFO | SFTrainer | Epoch 980 | total 27.5844 | rec_rna 3.6047 | rec_atac 7.4287 | clip 4.2648 | clip_weight 0.5000 | lr 1.00e-03 | best 27.4791
+2026-04-03 09:57:51,751 | INFO | SFTrainer | Epoch 990 | total 27.5077 | rec_rna 3.5992 | rec_atac 7.4051 | clip 4.2129 | clip_weight 0.5000 | lr 1.00e-03 | best 27.4580
+2026-04-03 09:57:52,606 | INFO | SFTrainer | Epoch 1000 | total 27.4540 | rec_rna 3.5912 | rec_atac 7.3792 | clip 4.2373 | clip_weight 0.5000 | lr 1.00e-03 | best 27.4134
+2026-04-03 09:57:53,537 | INFO | SFTrainer | Epoch 1010 | total 27.3600 | rec_rna 3.5801 | rec_atac 7.3688 | clip 4.1811 | clip_weight 0.5000 | lr 1.00e-03 | best 27.3208
+2026-04-03 09:57:54,405 | INFO | SFTrainer | Epoch 1020 | total 27.3359 | rec_rna 3.5834 | rec_atac 7.3434 | clip 4.1513 | clip_weight 0.5000 | lr 1.00e-03 | best 27.2887
+2026-04-03 09:57:55,377 | INFO | SFTrainer | Epoch 1030 | total 27.2511 | rec_rna 3.5696 | rec_atac 7.3459 | clip 4.1144 | clip_weight 0.5000 | lr 1.00e-03 | best 27.1790
+2026-04-03 09:57:56,338 | INFO | SFTrainer | Epoch 1040 | total 27.1507 | rec_rna 3.5638 | rec_atac 7.2932 | clip 4.0766 | clip_weight 0.5000 | lr 1.00e-03 | best 27.1507
+2026-04-03 09:57:57,312 | INFO | SFTrainer | Epoch 1050 | total 26.9859 | rec_rna 3.5422 | rec_atac 7.2561 | clip 4.0378 | clip_weight 0.5000 | lr 1.00e-03 | best 26.9859
+2026-04-03 09:57:58,160 | INFO | SFTrainer | Epoch 1060 | total 27.0183 | rec_rna 3.5493 | rec_atac 7.2636 | clip 4.0163 | clip_weight 0.5000 | lr 1.00e-03 | best 26.9859
+2026-04-03 09:57:59,027 | INFO | SFTrainer | Epoch 1070 | total 26.9389 | rec_rna 3.5450 | rec_atac 7.2257 | clip 3.9760 | clip_weight 0.5000 | lr 1.00e-03 | best 26.9240
+2026-04-03 09:58:00,009 | INFO | SFTrainer | Epoch 1080 | total 26.8255 | rec_rna 3.5268 | rec_atac 7.2160 | clip 3.9510 | clip_weight 0.5000 | lr 1.00e-03 | best 26.8255
+2026-04-03 09:58:00,941 | INFO | SFTrainer | Epoch 1090 | total 26.8250 | rec_rna 3.5328 | rec_atac 7.2019 | clip 3.9183 | clip_weight 0.5000 | lr 1.00e-03 | best 26.7863
+2026-04-03 09:58:01,839 | INFO | SFTrainer | Epoch 1100 | total 26.8707 | rec_rna 3.5394 | rec_atac 7.2200 | clip 3.9069 | clip_weight 0.5000 | lr 1.00e-03 | best 26.7436
+2026-04-03 09:58:02,756 | INFO | SFTrainer | Epoch 1110 | total 26.7181 | rec_rna 3.5221 | rec_atac 7.1854 | clip 3.8440 | clip_weight 0.5000 | lr 1.00e-03 | best 26.6413
+2026-04-03 09:58:03,665 | INFO | SFTrainer | Epoch 1120 | total 26.7631 | rec_rna 3.5348 | rec_atac 7.1650 | clip 3.8479 | clip_weight 0.5000 | lr 1.00e-03 | best 26.6206
+2026-04-03 09:58:04,632 | INFO | SFTrainer | Epoch 1130 | total 26.5946 | rec_rna 3.5083 | rec_atac 7.1431 | clip 3.8201 | clip_weight 0.5000 | lr 1.00e-03 | best 26.5638
+2026-04-03 09:58:05,518 | INFO | SFTrainer | Epoch 1140 | total 26.5547 | rec_rna 3.5056 | rec_atac 7.1292 | clip 3.7950 | clip_weight 0.5000 | lr 1.00e-03 | best 26.5167
+2026-04-03 09:58:06,393 | INFO | SFTrainer | Epoch 1150 | total 26.4639 | rec_rna 3.4979 | rec_atac 7.0999 | clip 3.7490 | clip_weight 0.5000 | lr 1.00e-03 | best 26.4413
+2026-04-03 09:58:07,272 | INFO | SFTrainer | Epoch 1160 | total 26.3977 | rec_rna 3.4905 | rec_atac 7.0887 | clip 3.7130 | clip_weight 0.5000 | lr 1.00e-03 | best 26.3882
+2026-04-03 09:58:08,200 | INFO | SFTrainer | Epoch 1170 | total 26.3422 | rec_rna 3.4752 | rec_atac 7.1044 | clip 3.7238 | clip_weight 0.5000 | lr 1.00e-03 | best 26.2639
+2026-04-03 09:58:09,022 | INFO | SFTrainer | Epoch 1180 | total 26.2922 | rec_rna 3.4810 | rec_atac 7.0567 | clip 3.6605 | clip_weight 0.5000 | lr 1.00e-03 | best 26.2639
+2026-04-03 09:58:10,003 | INFO | SFTrainer | Epoch 1190 | total 26.2769 | rec_rna 3.4765 | rec_atac 7.0698 | clip 3.6488 | clip_weight 0.5000 | lr 1.00e-03 | best 26.2386
+2026-04-03 09:58:11,071 | INFO | SFTrainer | Epoch 1200 | total 26.2060 | rec_rna 3.4695 | rec_atac 7.0680 | clip 3.5808 | clip_weight 0.5000 | lr 1.00e-03 | best 26.1929
+2026-04-03 09:58:12,006 | INFO | SFTrainer | Epoch 1210 | total 26.1979 | rec_rna 3.4709 | rec_atac 7.0612 | clip 3.5643 | clip_weight 0.5000 | lr 1.00e-03 | best 26.1329
+2026-04-03 09:58:12,898 | INFO | SFTrainer | Epoch 1220 | total 26.1840 | rec_rna 3.4696 | rec_atac 7.0573 | clip 3.5575 | clip_weight 0.5000 | lr 1.00e-03 | best 26.0953
+2026-04-03 09:58:13,782 | INFO | SFTrainer | Epoch 1230 | total 26.0337 | rec_rna 3.4534 | rec_atac 6.9992 | clip 3.5353 | clip_weight 0.5000 | lr 1.00e-03 | best 25.9800
+2026-04-03 09:58:14,637 | INFO | SFTrainer | Epoch 1240 | total 25.9855 | rec_rna 3.4489 | rec_atac 6.9930 | clip 3.4957 | clip_weight 0.5000 | lr 1.00e-03 | best 25.9571
+2026-04-03 09:58:15,527 | INFO | SFTrainer | Epoch 1250 | total 25.9163 | rec_rna 3.4466 | rec_atac 6.9618 | clip 3.4432 | clip_weight 0.5000 | lr 1.00e-03 | best 25.8650
+2026-04-03 09:58:16,399 | INFO | SFTrainer | Epoch 1260 | total 25.9776 | rec_rna 3.4555 | rec_atac 6.9711 | clip 3.4584 | clip_weight 0.5000 | lr 1.00e-03 | best 25.8621
+2026-04-03 09:58:17,264 | INFO | SFTrainer | Epoch 1270 | total 25.8961 | rec_rna 3.4471 | rec_atac 6.9685 | clip 3.3845 | clip_weight 0.5000 | lr 1.00e-03 | best 25.7895
+2026-04-03 09:58:18,110 | INFO | SFTrainer | Epoch 1280 | total 25.8443 | rec_rna 3.4344 | rec_atac 6.9904 | clip 3.3641 | clip_weight 0.5000 | lr 1.00e-03 | best 25.7476
+2026-04-03 09:58:18,920 | INFO | SFTrainer | Epoch 1290 | total 25.8336 | rec_rna 3.4488 | rec_atac 6.9227 | clip 3.3338 | clip_weight 0.5000 | lr 1.00e-03 | best 25.7476
+2026-04-03 09:58:19,764 | INFO | SFTrainer | Epoch 1300 | total 25.8082 | rec_rna 3.4343 | rec_atac 6.9750 | clip 3.3232 | clip_weight 0.5000 | lr 1.00e-03 | best 25.7476
+2026-04-03 09:58:20,743 | INFO | SFTrainer | Epoch 1310 | total 25.6557 | rec_rna 3.4202 | rec_atac 6.9144 | clip 3.2807 | clip_weight 0.5000 | lr 1.00e-03 | best 25.6557
+2026-04-03 09:58:21,644 | INFO | SFTrainer | Epoch 1320 | total 25.7609 | rec_rna 3.4328 | rec_atac 6.9633 | clip 3.2677 | clip_weight 0.5000 | lr 1.00e-03 | best 25.6201
+2026-04-03 09:58:22,638 | INFO | SFTrainer | Epoch 1330 | total 25.5989 | rec_rna 3.4138 | rec_atac 6.9210 | clip 3.2176 | clip_weight 0.5000 | lr 1.00e-03 | best 25.5582
+2026-04-03 09:58:23,519 | INFO | SFTrainer | Epoch 1340 | total 25.5409 | rec_rna 3.4114 | rec_atac 6.8822 | clip 3.2035 | clip_weight 0.5000 | lr 1.00e-03 | best 25.4828
+2026-04-03 09:58:24,386 | INFO | SFTrainer | Epoch 1350 | total 25.5097 | rec_rna 3.4068 | rec_atac 6.8963 | clip 3.1589 | clip_weight 0.5000 | lr 1.00e-03 | best 25.4212
+2026-04-03 09:58:25,221 | INFO | SFTrainer | Epoch 1360 | total 25.5285 | rec_rna 3.4138 | rec_atac 6.8914 | clip 3.1361 | clip_weight 0.5000 | lr 1.00e-03 | best 25.4212
+2026-04-03 09:58:26,143 | INFO | SFTrainer | Epoch 1370 | total 25.4892 | rec_rna 3.4146 | rec_atac 6.8686 | clip 3.0953 | clip_weight 0.5000 | lr 1.00e-03 | best 25.3331
+2026-04-03 09:58:26,983 | INFO | SFTrainer | Epoch 1380 | total 25.3651 | rec_rna 3.3898 | rec_atac 6.9002 | clip 3.0316 | clip_weight 0.5000 | lr 1.00e-03 | best 25.3079
+2026-04-03 09:58:27,826 | INFO | SFTrainer | Epoch 1390 | total 25.3063 | rec_rna 3.3936 | rec_atac 6.8354 | clip 3.0059 | clip_weight 0.5000 | lr 1.00e-03 | best 25.3063
+2026-04-03 09:58:28,686 | INFO | SFTrainer | Epoch 1400 | total 25.3226 | rec_rna 3.3981 | rec_atac 6.8389 | clip 2.9864 | clip_weight 0.5000 | lr 1.00e-03 | best 25.2575
+2026-04-03 09:58:29,583 | INFO | SFTrainer | Epoch 1410 | total 25.3049 | rec_rna 3.3950 | rec_atac 6.8535 | clip 2.9525 | clip_weight 0.5000 | lr 1.00e-03 | best 25.2010
+2026-04-03 09:58:30,477 | INFO | SFTrainer | Epoch 1420 | total 25.2164 | rec_rna 3.3864 | rec_atac 6.8237 | clip 2.9217 | clip_weight 0.5000 | lr 1.00e-03 | best 25.1833
+2026-04-03 09:58:31,329 | INFO | SFTrainer | Epoch 1430 | total 25.2234 | rec_rna 3.3829 | rec_atac 6.8543 | clip 2.9091 | clip_weight 0.5000 | lr 1.00e-03 | best 25.0796
+2026-04-03 09:58:32,207 | INFO | SFTrainer | Epoch 1440 | total 25.2067 | rec_rna 3.3916 | rec_atac 6.8123 | clip 2.8733 | clip_weight 0.5000 | lr 1.00e-03 | best 25.0696
+2026-04-03 09:58:33,103 | INFO | SFTrainer | Epoch 1450 | total 25.1605 | rec_rna 3.3889 | rec_atac 6.7957 | clip 2.8404 | clip_weight 0.5000 | lr 1.00e-03 | best 25.0455
+2026-04-03 09:58:33,968 | INFO | SFTrainer | Epoch 1460 | total 25.1286 | rec_rna 3.3846 | rec_atac 6.8096 | clip 2.7924 | clip_weight 0.5000 | lr 1.00e-03 | best 25.0015
+2026-04-03 09:58:34,846 | INFO | SFTrainer | Epoch 1470 | total 24.9665 | rec_rna 3.3631 | rec_atac 6.7739 | clip 2.7548 | clip_weight 0.5000 | lr 1.00e-03 | best 24.9665
+2026-04-03 09:58:35,782 | INFO | SFTrainer | Epoch 1480 | total 24.8716 | rec_rna 3.3473 | rec_atac 6.7704 | clip 2.7292 | clip_weight 0.5000 | lr 1.00e-03 | best 24.8716
+2026-04-03 09:58:36,673 | INFO | SFTrainer | Epoch 1490 | total 24.8530 | rec_rna 3.3518 | rec_atac 6.7605 | clip 2.6670 | clip_weight 0.5000 | lr 1.00e-03 | best 24.8530
+2026-04-03 09:58:37,530 | INFO | SFTrainer | Epoch 1500 | total 24.8979 | rec_rna 3.3654 | rec_atac 6.7455 | clip 2.6509 | clip_weight 0.5000 | lr 1.00e-03 | best 24.7894
+2026-04-03 09:58:38,379 | INFO | SFTrainer | Epoch 1510 | total 24.8235 | rec_rna 3.3548 | rec_atac 6.7393 | clip 2.6208 | clip_weight 0.5000 | lr 1.00e-03 | best 24.7894
+2026-04-03 09:58:39,268 | INFO | SFTrainer | Epoch 1520 | total 24.7765 | rec_rna 3.3589 | rec_atac 6.7130 | clip 2.5381 | clip_weight 0.5000 | lr 1.00e-03 | best 24.7627
+2026-04-03 09:58:40,244 | INFO | SFTrainer | Epoch 1530 | total 24.6792 | rec_rna 3.3393 | rec_atac 6.7251 | clip 2.5154 | clip_weight 0.5000 | lr 1.00e-03 | best 24.6449
+2026-04-03 09:58:41,046 | INFO | SFTrainer | Epoch 1540 | total 24.7323 | rec_rna 3.3564 | rec_atac 6.7007 | clip 2.4987 | clip_weight 0.5000 | lr 1.00e-03 | best 24.6449
+2026-04-03 09:58:41,933 | INFO | SFTrainer | Epoch 1550 | total 24.6410 | rec_rna 3.3393 | rec_atac 6.7268 | clip 2.4355 | clip_weight 0.5000 | lr 1.00e-03 | best 24.6223
+2026-04-03 09:58:42,828 | INFO | SFTrainer | Epoch 1560 | total 24.6618 | rec_rna 3.3481 | rec_atac 6.7142 | clip 2.4139 | clip_weight 0.5000 | lr 1.00e-03 | best 24.5547
+2026-04-03 09:58:43,635 | INFO | SFTrainer | Epoch 1570 | total 24.5915 | rec_rna 3.3416 | rec_atac 6.6885 | clip 2.3897 | clip_weight 0.5000 | lr 1.00e-03 | best 24.5547
+2026-04-03 09:58:44,556 | INFO | SFTrainer | Epoch 1580 | total 24.4268 | rec_rna 3.3124 | rec_atac 6.6888 | clip 2.3524 | clip_weight 0.5000 | lr 1.00e-03 | best 24.4268
+2026-04-03 09:58:45,365 | INFO | SFTrainer | Epoch 1590 | total 24.5366 | rec_rna 3.3278 | rec_atac 6.7176 | clip 2.3596 | clip_weight 0.5000 | lr 1.00e-03 | best 24.4268
+2026-04-03 09:58:46,189 | INFO | SFTrainer | Epoch 1600 | total 24.4376 | rec_rna 3.3275 | rec_atac 6.6481 | clip 2.3039 | clip_weight 0.5000 | lr 1.00e-03 | best 24.4268
+2026-04-03 09:58:47,117 | INFO | SFTrainer | Epoch 1610 | total 24.4984 | rec_rna 3.3333 | rec_atac 6.7020 | clip 2.2602 | clip_weight 0.5000 | lr 1.00e-03 | best 24.3125
+2026-04-03 09:58:47,930 | INFO | SFTrainer | Epoch 1620 | total 24.3252 | rec_rna 3.3164 | rec_atac 6.6520 | clip 2.1828 | clip_weight 0.5000 | lr 1.00e-03 | best 24.3125
+2026-04-03 09:58:48,741 | INFO | SFTrainer | Epoch 1630 | total 24.3970 | rec_rna 3.3274 | rec_atac 6.6676 | clip 2.1850 | clip_weight 0.5000 | lr 1.00e-03 | best 24.3125
+2026-04-03 09:58:49,631 | INFO | SFTrainer | Epoch 1640 | total 24.3724 | rec_rna 3.3246 | rec_atac 6.6737 | clip 2.1514 | clip_weight 0.5000 | lr 1.00e-03 | best 24.2924
+2026-04-03 09:58:50,523 | INFO | SFTrainer | Epoch 1650 | total 24.2642 | rec_rna 3.3142 | rec_atac 6.6420 | clip 2.1029 | clip_weight 0.5000 | lr 1.00e-03 | best 24.2598
+2026-04-03 09:58:51,474 | INFO | SFTrainer | Epoch 1660 | total 24.2493 | rec_rna 3.3170 | rec_atac 6.6425 | clip 2.0438 | clip_weight 0.5000 | lr 1.00e-03 | best 24.1924
+2026-04-03 09:58:52,277 | INFO | SFTrainer | Epoch 1670 | total 24.2631 | rec_rna 3.3150 | rec_atac 6.6527 | clip 2.0712 | clip_weight 0.5000 | lr 1.00e-03 | best 24.1924
+2026-04-03 09:58:53,153 | INFO | SFTrainer | Epoch 1680 | total 24.2668 | rec_rna 3.3203 | rec_atac 6.6634 | clip 2.0038 | clip_weight 0.5000 | lr 1.00e-03 | best 24.1352
+2026-04-03 09:58:54,023 | INFO | SFTrainer | Epoch 1690 | total 24.1118 | rec_rna 3.3104 | rec_atac 6.6001 | clip 1.9190 | clip_weight 0.5000 | lr 1.00e-03 | best 24.0658
+2026-04-03 09:58:54,865 | INFO | SFTrainer | Epoch 1700 | total 24.1128 | rec_rna 3.3062 | rec_atac 6.6217 | clip 1.9205 | clip_weight 0.5000 | lr 1.00e-03 | best 24.0613
+2026-04-03 09:58:55,731 | INFO | SFTrainer | Epoch 1710 | total 24.1041 | rec_rna 3.3086 | rec_atac 6.6162 | clip 1.8898 | clip_weight 0.5000 | lr 1.00e-03 | best 24.0054
+2026-04-03 09:58:56,568 | INFO | SFTrainer | Epoch 1720 | total 24.0141 | rec_rna 3.2988 | rec_atac 6.5917 | clip 1.8565 | clip_weight 0.5000 | lr 1.00e-03 | best 24.0048
+2026-04-03 09:58:57,509 | INFO | SFTrainer | Epoch 1730 | total 23.9374 | rec_rna 3.2930 | rec_atac 6.5849 | clip 1.7755 | clip_weight 0.5000 | lr 1.00e-03 | best 23.9374
+2026-04-03 09:58:58,382 | INFO | SFTrainer | Epoch 1740 | total 24.0310 | rec_rna 3.3027 | rec_atac 6.6226 | clip 1.7893 | clip_weight 0.5000 | lr 1.00e-03 | best 23.9241
+2026-04-03 09:58:59,233 | INFO | SFTrainer | Epoch 1750 | total 24.0023 | rec_rna 3.3014 | rec_atac 6.5998 | clip 1.7914 | clip_weight 0.5000 | lr 1.00e-03 | best 23.9135
+2026-04-03 09:59:00,069 | INFO | SFTrainer | Epoch 1760 | total 23.9464 | rec_rna 3.2954 | rec_atac 6.6019 | clip 1.7346 | clip_weight 0.5000 | lr 1.00e-03 | best 23.9135
+2026-04-03 09:59:01,010 | INFO | SFTrainer | Epoch 1770 | total 23.8814 | rec_rna 3.2936 | rec_atac 6.5721 | clip 1.6823 | clip_weight 0.5000 | lr 1.00e-03 | best 23.8313
+2026-04-03 09:59:01,829 | INFO | SFTrainer | Epoch 1780 | total 23.8797 | rec_rna 3.2950 | rec_atac 6.5605 | clip 1.6883 | clip_weight 0.5000 | lr 1.00e-03 | best 23.8313
+2026-04-03 09:59:02,740 | INFO | SFTrainer | Epoch 1790 | total 23.8352 | rec_rna 3.2893 | rec_atac 6.5799 | clip 1.6174 | clip_weight 0.5000 | lr 1.00e-03 | best 23.7657
+2026-04-03 09:59:03,587 | INFO | SFTrainer | Epoch 1800 | total 23.8587 | rec_rna 3.2941 | rec_atac 6.5857 | clip 1.6047 | clip_weight 0.5000 | lr 1.00e-03 | best 23.7239
+2026-04-03 09:59:04,457 | INFO | SFTrainer | Epoch 1810 | total 23.7564 | rec_rna 3.2791 | rec_atac 6.5662 | clip 1.5894 | clip_weight 0.5000 | lr 1.00e-03 | best 23.7239
+2026-04-03 09:59:05,356 | INFO | SFTrainer | Epoch 1820 | total 23.7414 | rec_rna 3.2833 | rec_atac 6.5647 | clip 1.5207 | clip_weight 0.5000 | lr 1.00e-03 | best 23.6632
+2026-04-03 09:59:06,211 | INFO | SFTrainer | Epoch 1830 | total 23.6574 | rec_rna 3.2744 | rec_atac 6.5328 | clip 1.5050 | clip_weight 0.5000 | lr 1.00e-03 | best 23.6574
+2026-04-03 09:59:07,100 | INFO | SFTrainer | Epoch 1840 | total 23.6857 | rec_rna 3.2775 | rec_atac 6.5462 | clip 1.5043 | clip_weight 0.5000 | lr 1.00e-03 | best 23.6220
+2026-04-03 09:59:08,039 | INFO | SFTrainer | Epoch 1850 | total 23.5902 | rec_rna 3.2581 | rec_atac 6.5611 | clip 1.4777 | clip_weight 0.5000 | lr 1.00e-03 | best 23.5405
+2026-04-03 09:59:08,881 | INFO | SFTrainer | Epoch 1860 | total 23.6446 | rec_rna 3.2813 | rec_atac 6.5057 | clip 1.4645 | clip_weight 0.5000 | lr 1.00e-03 | best 23.5405
+2026-04-03 09:59:09,777 | INFO | SFTrainer | Epoch 1870 | total 23.4699 | rec_rna 3.2524 | rec_atac 6.5035 | clip 1.4093 | clip_weight 0.5000 | lr 1.00e-03 | best 23.4699
+2026-04-03 09:59:10,601 | INFO | SFTrainer | Epoch 1880 | total 23.5294 | rec_rna 3.2610 | rec_atac 6.5264 | clip 1.3957 | clip_weight 0.5000 | lr 1.00e-03 | best 23.4699
+2026-04-03 09:59:11,417 | INFO | SFTrainer | Epoch 1890 | total 23.5060 | rec_rna 3.2611 | rec_atac 6.5149 | clip 1.3714 | clip_weight 0.5000 | lr 1.00e-03 | best 23.4699
+2026-04-03 09:59:12,228 | INFO | SFTrainer | Epoch 1900 | total 23.5312 | rec_rna 3.2729 | rec_atac 6.4998 | clip 1.3340 | clip_weight 0.5000 | lr 1.00e-03 | best 23.4699
+2026-04-03 09:59:13,149 | INFO | SFTrainer | Epoch 1910 | total 23.4645 | rec_rna 3.2587 | rec_atac 6.5193 | clip 1.3039 | clip_weight 0.5000 | lr 1.00e-03 | best 23.4231
+2026-04-03 09:59:14,031 | INFO | SFTrainer | Epoch 1920 | total 23.3906 | rec_rna 3.2544 | rec_atac 6.4798 | clip 1.2774 | clip_weight 0.5000 | lr 1.00e-03 | best 23.3906
+2026-04-03 09:59:14,914 | INFO | SFTrainer | Epoch 1930 | total 23.3148 | rec_rna 3.2398 | rec_atac 6.4758 | clip 1.2805 | clip_weight 0.5000 | lr 1.00e-03 | best 23.3148
+2026-04-03 09:59:15,739 | INFO | SFTrainer | Epoch 1940 | total 23.4205 | rec_rna 3.2551 | rec_atac 6.5249 | clip 1.2407 | clip_weight 0.5000 | lr 1.00e-03 | best 23.3148
+2026-04-03 09:59:16,555 | INFO | SFTrainer | Epoch 1950 | total 23.4309 | rec_rna 3.2602 | rec_atac 6.5050 | clip 1.2498 | clip_weight 0.5000 | lr 1.00e-03 | best 23.3148
+2026-04-03 09:59:17,394 | INFO | SFTrainer | Epoch 1960 | total 23.4563 | rec_rna 3.2590 | rec_atac 6.5469 | clip 1.2287 | clip_weight 0.5000 | lr 1.00e-03 | best 23.3148
+2026-04-03 09:59:18,350 | INFO | SFTrainer | Epoch 1970 | total 23.2566 | rec_rna 3.2323 | rec_atac 6.5036 | clip 1.1828 | clip_weight 0.5000 | lr 1.00e-03 | best 23.2566
+2026-04-03 09:59:19,173 | INFO | SFTrainer | Epoch 1980 | total 23.3608 | rec_rna 3.2544 | rec_atac 6.4943 | clip 1.1893 | clip_weight 0.5000 | lr 1.00e-03 | best 23.2566
+2026-04-03 09:59:20,003 | INFO | SFTrainer | Epoch 1990 | total 23.2885 | rec_rna 3.2469 | rec_atac 6.4554 | clip 1.1975 | clip_weight 0.5000 | lr 1.00e-03 | best 23.2566
+2026-04-03 09:59:20,869 | INFO | SFTrainer | Epoch 2000 | total 23.2507 | rec_rna 3.2457 | rec_atac 6.4652 | clip 1.1139 | clip_weight 0.5000 | lr 1.00e-04 | best 23.2170
+2026-04-03 09:59:21,899 | INFO | SFTrainer | Epoch 2010 | total 23.1598 | rec_rna 3.2267 | rec_atac 6.4525 | clip 1.1486 | clip_weight 0.4995 | lr 1.00e-04 | best 23.1598
+2026-04-03 09:59:22,900 | INFO | SFTrainer | Epoch 2020 | total 23.1129 | rec_rna 3.2184 | rec_atac 6.4531 | clip 1.1396 | clip_weight 0.4980 | lr 1.00e-04 | best 23.0118
+2026-04-03 09:59:23,793 | INFO | SFTrainer | Epoch 2030 | total 22.9410 | rec_rna 3.2003 | rec_atac 6.3869 | clip 1.1155 | clip_weight 0.4956 | lr 1.00e-04 | best 22.9337
+2026-04-03 09:59:24,716 | INFO | SFTrainer | Epoch 2040 | total 22.9136 | rec_rna 3.1981 | rec_atac 6.3938 | clip 1.0752 | clip_weight 0.4921 | lr 1.00e-04 | best 22.9047
+2026-04-03 09:59:25,690 | INFO | SFTrainer | Epoch 2050 | total 22.9027 | rec_rna 3.1925 | rec_atac 6.4035 | clip 1.1009 | clip_weight 0.4878 | lr 1.00e-04 | best 22.8377
+2026-04-03 09:59:26,627 | INFO | SFTrainer | Epoch 2060 | total 22.8308 | rec_rna 3.1898 | rec_atac 6.3475 | clip 1.1072 | clip_weight 0.4824 | lr 1.00e-04 | best 22.8078
+2026-04-03 09:59:27,471 | INFO | SFTrainer | Epoch 2070 | total 22.8527 | rec_rna 3.1881 | rec_atac 6.3841 | clip 1.1095 | clip_weight 0.4762 | lr 1.00e-04 | best 22.7559
+2026-04-03 09:59:28,345 | INFO | SFTrainer | Epoch 2080 | total 22.8130 | rec_rna 3.1867 | rec_atac 6.3518 | clip 1.1250 | clip_weight 0.4691 | lr 1.00e-04 | best 22.7296
+2026-04-03 09:59:29,232 | INFO | SFTrainer | Epoch 2090 | total 22.7970 | rec_rna 3.1882 | rec_atac 6.3589 | clip 1.0786 | clip_weight 0.4611 | lr 1.00e-04 | best 22.7296
+2026-04-03 09:59:30,151 | INFO | SFTrainer | Epoch 2100 | total 22.7238 | rec_rna 3.1820 | rec_atac 6.3479 | clip 1.0301 | clip_weight 0.4523 | lr 1.00e-04 | best 22.6770
+2026-04-03 09:59:31,019 | INFO | SFTrainer | Epoch 2110 | total 22.8166 | rec_rna 3.1984 | rec_atac 6.3446 | clip 1.0849 | clip_weight 0.4426 | lr 1.00e-04 | best 22.6770
+2026-04-03 09:59:31,906 | INFO | SFTrainer | Epoch 2120 | total 22.6526 | rec_rna 3.1724 | rec_atac 6.3242 | clip 1.0795 | clip_weight 0.4322 | lr 1.00e-04 | best 22.6180
+2026-04-03 09:59:32,738 | INFO | SFTrainer | Epoch 2130 | total 22.7090 | rec_rna 3.1758 | rec_atac 6.3789 | clip 1.0714 | clip_weight 0.4211 | lr 1.00e-04 | best 22.6180
+2026-04-03 09:59:33,559 | INFO | SFTrainer | Epoch 2140 | total 22.6471 | rec_rna 3.1747 | rec_atac 6.3430 | clip 1.0519 | clip_weight 0.4094 | lr 1.00e-04 | best 22.6180
+2026-04-03 09:59:34,376 | INFO | SFTrainer | Epoch 2150 | total 22.6268 | rec_rna 3.1719 | rec_atac 6.3380 | clip 1.0816 | clip_weight 0.3969 | lr 1.00e-04 | best 22.6180
+2026-04-03 09:59:35,314 | INFO | SFTrainer | Epoch 2160 | total 22.6449 | rec_rna 3.1753 | rec_atac 6.3464 | clip 1.0995 | clip_weight 0.3840 | lr 1.00e-04 | best 22.5651
+2026-04-03 09:59:36,169 | INFO | SFTrainer | Epoch 2170 | total 22.6829 | rec_rna 3.1806 | rec_atac 6.3799 | clip 1.0800 | clip_weight 0.3704 | lr 1.00e-04 | best 22.5582
+2026-04-03 09:59:37,018 | INFO | SFTrainer | Epoch 2180 | total 22.6263 | rec_rna 3.1814 | rec_atac 6.3323 | clip 1.0860 | clip_weight 0.3564 | lr 1.00e-04 | best 22.4633
+2026-04-03 09:59:37,864 | INFO | SFTrainer | Epoch 2190 | total 22.5861 | rec_rna 3.1763 | rec_atac 6.3535 | clip 1.0263 | clip_weight 0.3420 | lr 1.00e-04 | best 22.4633
+2026-04-03 09:59:38,705 | INFO | SFTrainer | Epoch 2200 | total 22.6838 | rec_rna 3.1892 | rec_atac 6.3657 | clip 1.1375 | clip_weight 0.3273 | lr 1.00e-04 | best 22.4633
+2026-04-03 09:59:39,553 | INFO | SFTrainer | Epoch 2210 | total 22.5085 | rec_rna 3.1661 | rec_atac 6.3446 | clip 1.0683 | clip_weight 0.3122 | lr 1.00e-04 | best 22.4633
+2026-04-03 09:59:40,379 | INFO | SFTrainer | Epoch 2220 | total 22.4654 | rec_rna 3.1605 | rec_atac 6.3497 | clip 1.0552 | clip_weight 0.2968 | lr 1.00e-04 | best 22.4633
+2026-04-03 09:59:41,244 | INFO | SFTrainer | Epoch 2230 | total 22.5218 | rec_rna 3.1760 | rec_atac 6.3453 | clip 1.0535 | clip_weight 0.2813 | lr 1.00e-04 | best 22.4507
+2026-04-03 09:59:42,260 | INFO | SFTrainer | Epoch 2240 | total 22.5119 | rec_rna 3.1714 | rec_atac 6.3661 | clip 1.0871 | clip_weight 0.2657 | lr 1.00e-04 | best 22.4172
+2026-04-03 09:59:43,150 | INFO | SFTrainer | Epoch 2250 | total 22.3787 | rec_rna 3.1627 | rec_atac 6.3116 | clip 1.0147 | clip_weight 0.2500 | lr 1.00e-04 | best 22.3787
+2026-04-03 09:59:43,998 | INFO | SFTrainer | Epoch 2260 | total 22.4299 | rec_rna 3.1699 | rec_atac 6.3361 | clip 1.0420 | clip_weight 0.2343 | lr 1.00e-04 | best 22.3787
+2026-04-03 09:59:44,853 | INFO | SFTrainer | Epoch 2270 | total 22.4228 | rec_rna 3.1719 | rec_atac 6.3236 | clip 1.0956 | clip_weight 0.2187 | lr 1.00e-04 | best 22.3156
+2026-04-03 09:59:45,710 | INFO | SFTrainer | Epoch 2280 | total 22.3472 | rec_rna 3.1640 | rec_atac 6.3105 | clip 1.0675 | clip_weight 0.2032 | lr 1.00e-04 | best 22.3104
+2026-04-03 09:59:46,550 | INFO | SFTrainer | Epoch 2290 | total 22.3751 | rec_rna 3.1704 | rec_atac 6.3239 | clip 1.0600 | clip_weight 0.1878 | lr 1.00e-04 | best 22.3104
+2026-04-03 09:59:47,364 | INFO | SFTrainer | Epoch 2300 | total 22.4098 | rec_rna 3.1692 | rec_atac 6.3709 | clip 1.1168 | clip_weight 0.1727 | lr 1.00e-04 | best 22.3104
+2026-04-03 09:59:48,317 | INFO | SFTrainer | Epoch 2310 | total 22.2755 | rec_rna 3.1578 | rec_atac 6.3108 | clip 1.1116 | clip_weight 0.1580 | lr 1.00e-04 | best 22.2219
+2026-04-03 09:59:49,181 | INFO | SFTrainer | Epoch 2320 | total 22.2641 | rec_rna 3.1556 | rec_atac 6.3324 | clip 1.0707 | clip_weight 0.1436 | lr 1.00e-04 | best 22.2219
+2026-04-03 09:59:50,001 | INFO | SFTrainer | Epoch 2330 | total 22.2998 | rec_rna 3.1643 | rec_atac 6.3393 | clip 1.0741 | clip_weight 0.1296 | lr 1.00e-04 | best 22.2219
+2026-04-03 09:59:50,869 | INFO | SFTrainer | Epoch 2340 | total 22.2982 | rec_rna 3.1672 | rec_atac 6.3348 | clip 1.0976 | clip_weight 0.1160 | lr 1.00e-04 | best 22.1586
+2026-04-03 09:59:51,729 | INFO | SFTrainer | Epoch 2350 | total 22.2499 | rec_rna 3.1639 | rec_atac 6.3169 | clip 1.1032 | clip_weight 0.1031 | lr 1.00e-04 | best 22.1586
+2026-04-03 09:59:52,575 | INFO | SFTrainer | Epoch 2360 | total 22.3159 | rec_rna 3.1720 | rec_atac 6.3564 | clip 1.0970 | clip_weight 0.0906 | lr 1.00e-04 | best 22.1586
+2026-04-03 09:59:53,451 | INFO | SFTrainer | Epoch 2370 | total 22.2030 | rec_rna 3.1597 | rec_atac 6.3184 | clip 1.0938 | clip_weight 0.0789 | lr 1.00e-04 | best 22.1544
+2026-04-03 09:59:54,326 | INFO | SFTrainer | Epoch 2380 | total 22.1982 | rec_rna 3.1656 | rec_atac 6.2962 | clip 1.0903 | clip_weight 0.0678 | lr 1.00e-04 | best 22.1307
+2026-04-03 09:59:55,145 | INFO | SFTrainer | Epoch 2390 | total 22.2675 | rec_rna 3.1668 | rec_atac 6.3669 | clip 1.1590 | clip_weight 0.0574 | lr 1.00e-04 | best 22.1307
+2026-04-03 09:59:56,010 | INFO | SFTrainer | Epoch 2400 | total 22.2031 | rec_rna 3.1644 | rec_atac 6.3267 | clip 1.1413 | clip_weight 0.0477 | lr 1.00e-04 | best 22.0995
+2026-04-03 09:59:56,850 | INFO | SFTrainer | Epoch 2410 | total 22.1975 | rec_rna 3.1673 | rec_atac 6.3181 | clip 1.1095 | clip_weight 0.0389 | lr 1.00e-04 | best 22.0995
+2026-04-03 09:59:57,756 | INFO | SFTrainer | Epoch 2420 | total 22.0346 | rec_rna 3.1402 | rec_atac 6.2998 | clip 1.0865 | clip_weight 0.0309 | lr 1.00e-04 | best 22.0346
+2026-04-03 09:59:58,619 | INFO | SFTrainer | Epoch 2430 | total 22.1861 | rec_rna 3.1740 | rec_atac 6.2892 | clip 1.1330 | clip_weight 0.0238 | lr 1.00e-04 | best 22.0346
+2026-04-03 09:59:59,490 | INFO | SFTrainer | Epoch 2440 | total 22.1183 | rec_rna 3.1520 | rec_atac 6.3378 | clip 1.1640 | clip_weight 0.0176 | lr 1.00e-04 | best 22.0346
+2026-04-03 10:00:00,371 | INFO | SFTrainer | Epoch 2450 | total 22.0814 | rec_rna 3.1611 | rec_atac 6.2620 | clip 1.1565 | clip_weight 0.0122 | lr 1.00e-04 | best 22.0325
+2026-04-03 10:00:01,222 | INFO | SFTrainer | Epoch 2460 | total 22.1706 | rec_rna 3.1693 | rec_atac 6.3149 | clip 1.1611 | clip_weight 0.0079 | lr 1.00e-04 | best 22.0325
+2026-04-03 10:00:02,110 | INFO | SFTrainer | Epoch 2470 | total 22.0223 | rec_rna 3.1477 | rec_atac 6.2785 | clip 1.1938 | clip_weight 0.0044 | lr 1.00e-04 | best 21.9949
+2026-04-03 10:00:02,982 | INFO | SFTrainer | Epoch 2480 | total 22.0577 | rec_rna 3.1488 | rec_atac 6.3115 | clip 1.1805 | clip_weight 0.0020 | lr 1.00e-04 | best 21.9929
+2026-04-03 10:00:03,821 | INFO | SFTrainer | Epoch 2490 | total 22.0870 | rec_rna 3.1550 | rec_atac 6.3112 | clip 1.2503 | clip_weight 0.0005 | lr 1.00e-04 | best 21.9929
+2026-04-03 10:00:04,655 | INFO | SFTrainer | Epoch 2500 | total 22.0929 | rec_rna 3.1578 | rec_atac 6.3038 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9929
+2026-04-03 10:00:05,482 | INFO | SFTrainer | Epoch 2510 | total 22.1093 | rec_rna 3.1617 | rec_atac 6.3009 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9929
+2026-04-03 10:00:06,278 | INFO | SFTrainer | Epoch 2520 | total 22.0503 | rec_rna 3.1450 | rec_atac 6.3254 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9929
+2026-04-03 10:00:07,103 | INFO | SFTrainer | Epoch 2530 | total 22.1371 | rec_rna 3.1612 | rec_atac 6.3312 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9872
+2026-04-03 10:00:07,940 | INFO | SFTrainer | Epoch 2540 | total 22.0376 | rec_rna 3.1471 | rec_atac 6.3018 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9872
+2026-04-03 10:00:08,732 | INFO | SFTrainer | Epoch 2550 | total 22.0454 | rec_rna 3.1484 | rec_atac 6.3034 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9872
+2026-04-03 10:00:09,583 | INFO | SFTrainer | Epoch 2560 | total 22.0342 | rec_rna 3.1492 | rec_atac 6.2881 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:10,380 | INFO | SFTrainer | Epoch 2570 | total 22.0272 | rec_rna 3.1510 | rec_atac 6.2721 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:11,196 | INFO | SFTrainer | Epoch 2580 | total 22.0410 | rec_rna 3.1400 | rec_atac 6.3408 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:11,986 | INFO | SFTrainer | Epoch 2590 | total 22.0647 | rec_rna 3.1506 | rec_atac 6.3116 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:12,773 | INFO | SFTrainer | Epoch 2600 | total 21.9755 | rec_rna 3.1435 | rec_atac 6.2578 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:13,587 | INFO | SFTrainer | Epoch 2610 | total 22.0979 | rec_rna 3.1564 | rec_atac 6.3161 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:14,363 | INFO | SFTrainer | Epoch 2620 | total 22.0903 | rec_rna 3.1564 | rec_atac 6.3084 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:15,156 | INFO | SFTrainer | Epoch 2630 | total 22.0612 | rec_rna 3.1523 | rec_atac 6.2995 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9637
+2026-04-03 10:00:15,973 | INFO | SFTrainer | Epoch 2640 | total 22.0429 | rec_rna 3.1458 | rec_atac 6.3140 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9543
+2026-04-03 10:00:16,764 | INFO | SFTrainer | Epoch 2650 | total 22.0606 | rec_rna 3.1526 | rec_atac 6.2977 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9543
+2026-04-03 10:00:17,596 | INFO | SFTrainer | Epoch 2660 | total 21.9481 | rec_rna 3.1372 | rec_atac 6.2623 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9481
+2026-04-03 10:00:18,371 | INFO | SFTrainer | Epoch 2670 | total 22.0674 | rec_rna 3.1612 | rec_atac 6.2615 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9481
+2026-04-03 10:00:19,180 | INFO | SFTrainer | Epoch 2680 | total 22.0275 | rec_rna 3.1505 | rec_atac 6.2749 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9381
+2026-04-03 10:00:19,990 | INFO | SFTrainer | Epoch 2690 | total 22.0047 | rec_rna 3.1444 | rec_atac 6.2827 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9148
+2026-04-03 10:00:20,766 | INFO | SFTrainer | Epoch 2700 | total 22.0474 | rec_rna 3.1437 | rec_atac 6.3289 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9148
+2026-04-03 10:00:21,625 | INFO | SFTrainer | Epoch 2710 | total 21.9634 | rec_rna 3.1397 | rec_atac 6.2646 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9068
+2026-04-03 10:00:22,416 | INFO | SFTrainer | Epoch 2720 | total 22.1017 | rec_rna 3.1604 | rec_atac 6.2998 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9068
+2026-04-03 10:00:23,248 | INFO | SFTrainer | Epoch 2730 | total 22.0873 | rec_rna 3.1632 | rec_atac 6.2711 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9015
+2026-04-03 10:00:24,039 | INFO | SFTrainer | Epoch 2740 | total 22.0071 | rec_rna 3.1461 | rec_atac 6.2764 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9015
+2026-04-03 10:00:24,813 | INFO | SFTrainer | Epoch 2750 | total 21.9668 | rec_rna 3.1353 | rec_atac 6.2903 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9015
+2026-04-03 10:00:25,628 | INFO | SFTrainer | Epoch 2760 | total 21.9889 | rec_rna 3.1419 | rec_atac 6.2794 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9015
+2026-04-03 10:00:26,443 | INFO | SFTrainer | Epoch 2770 | total 21.9685 | rec_rna 3.1407 | rec_atac 6.2652 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.9015
+2026-04-03 10:00:27,319 | INFO | SFTrainer | Epoch 2780 | total 21.8974 | rec_rna 3.1309 | rec_atac 6.2428 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8974
+2026-04-03 10:00:28,145 | INFO | SFTrainer | Epoch 2790 | total 22.0010 | rec_rna 3.1429 | rec_atac 6.2863 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8886
+2026-04-03 10:00:28,972 | INFO | SFTrainer | Epoch 2800 | total 21.9966 | rec_rna 3.1461 | rec_atac 6.2663 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:29,789 | INFO | SFTrainer | Epoch 2810 | total 21.9594 | rec_rna 3.1350 | rec_atac 6.2846 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:30,576 | INFO | SFTrainer | Epoch 2820 | total 21.9229 | rec_rna 3.1351 | rec_atac 6.2473 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:31,366 | INFO | SFTrainer | Epoch 2830 | total 22.0049 | rec_rna 3.1469 | rec_atac 6.2704 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:32,154 | INFO | SFTrainer | Epoch 2840 | total 21.9238 | rec_rna 3.1318 | rec_atac 6.2647 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:32,999 | INFO | SFTrainer | Epoch 2850 | total 22.0452 | rec_rna 3.1515 | rec_atac 6.2874 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:33,817 | INFO | SFTrainer | Epoch 2860 | total 21.8838 | rec_rna 3.1263 | rec_atac 6.2525 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:34,602 | INFO | SFTrainer | Epoch 2870 | total 21.8922 | rec_rna 3.1281 | rec_atac 6.2518 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:35,405 | INFO | SFTrainer | Epoch 2880 | total 22.0203 | rec_rna 3.1442 | rec_atac 6.2994 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:36,203 | INFO | SFTrainer | Epoch 2890 | total 21.9728 | rec_rna 3.1358 | rec_atac 6.2940 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:37,001 | INFO | SFTrainer | Epoch 2900 | total 21.9252 | rec_rna 3.1291 | rec_atac 6.2799 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:37,816 | INFO | SFTrainer | Epoch 2910 | total 21.9775 | rec_rna 3.1354 | rec_atac 6.3007 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:38,604 | INFO | SFTrainer | Epoch 2920 | total 21.9146 | rec_rna 3.1324 | rec_atac 6.2528 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:39,397 | INFO | SFTrainer | Epoch 2930 | total 22.0302 | rec_rna 3.1470 | rec_atac 6.2954 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:40,242 | INFO | SFTrainer | Epoch 2940 | total 21.9409 | rec_rna 3.1371 | rec_atac 6.2553 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:41,035 | INFO | SFTrainer | Epoch 2950 | total 21.9003 | rec_rna 3.1288 | rec_atac 6.2564 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:41,889 | INFO | SFTrainer | Epoch 2960 | total 21.9108 | rec_rna 3.1287 | rec_atac 6.2674 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:42,730 | INFO | SFTrainer | Epoch 2970 | total 21.9442 | rec_rna 3.1361 | rec_atac 6.2635 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:43,502 | INFO | SFTrainer | Epoch 2980 | total 21.8555 | rec_rna 3.1264 | rec_atac 6.2234 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8406
+2026-04-03 10:00:44,329 | INFO | SFTrainer | Epoch 2990 | total 21.8477 | rec_rna 3.1259 | rec_atac 6.2180 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8196
+2026-04-03 10:00:45,178 | INFO | SFTrainer | Epoch 3000 | total 21.8291 | rec_rna 3.1185 | rec_atac 6.2364 | clip 0.0000 | clip_weight 0.0000 | lr 1.00e-04 | best 21.8040
+2026-04-03 10:00:45,199 | INFO | SFTrainer | Training finished. Best loss=21.8040
+2026-04-03 10:00:45,200 | INFO | SFTrainer | Training run complete.
+
+========================================================================================
+2026-04-03 10:00:57,536 | INFO | SFEvaluate | [Phase 3] Evaluation started.
+2026-04-03 10:00:57,536 | INFO | SFEvaluate | Loading processed data...
+2026-04-03 10:00:57,791 | INFO | SFEvaluate | Initializing model...
+2026-04-03 10:00:57,894 | INFO | SFEvaluate | Loading checkpoint: ckpt_best.pth
+2026-04-03 10:00:57,941 | INFO | SFEvaluate | Inference running...
+2026-04-03 10:00:58,498 | INFO | SFEvaluate | Latent shape: torch.Size([2129, 128])
+2026-04-03 10:01:24,362 | INFO | SFEvaluate | Artifacts: ./results/tuning/e13/figures/spatial_analysis.pdf | ./results/tuning/e13/predictions/embedding_joint.h5ad
+2026-04-03 10:01:24,362 | INFO | SFEvaluate | Eval metrics | checkpoint=ckpt_best.pth | epoch=BEST (Epoch 3000) | latent_moran=0.4041 | cluster_moran=0.6772
+2026-04-03 10:01:24,362 | INFO | SFEvaluate | GT metrics | checkpoint=ckpt_best.pth | epoch=BEST (Epoch 3000) | ARI=0.5114 | NMI=0.6024 | AMI=0.5952 | HOM=0.6468 | n_valid=2129
+2026-04-03 10:01:24,362 | INFO | SFEvaluate | Evaluation complete.
+
+========================================================================================
+2026-04-03 10:01:37,508 | INFO | SFEvaluateRange | [Range Evaluate] Started. epochs=[1500, 1600, 1700, 1800, 1900, 2000, 2100, 2200, 2300, 2400, 2500, 2600, 2700, 2800, 2900, 3000]
+2026-04-03 10:01:37,508 | INFO | SFEvaluateRange | Loading processed data...
+2026-04-03 10:01:37,772 | INFO | SFEvaluateRange | Initializing model...
+2026-04-03 10:01:37,871 | INFO | SFEvaluateRange | Evaluating epoch 1500 with ckpt_1500.pth
+2026-04-03 10:02:02,449 | INFO | SFEvaluateRange | Eval metrics (epoch_1500) | checkpoint=ckpt_1500.pth | epoch=Epoch 1500 | latent_moran=0.3906 | cluster_moran=0.6387
+2026-04-03 10:02:02,449 | INFO | SFEvaluateRange | GT metrics (epoch_1500) | checkpoint=ckpt_1500.pth | epoch=Epoch 1500 | ARI=0.4874 | NMI=0.5874 | AMI=0.5799 | HOM=0.6332 | n_valid=2129
+2026-04-03 10:02:02,450 | INFO | SFEvaluateRange | Artifacts (epoch_1500): ./results/tuning/e13/figures/spatial_analysis_epoch_1500.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_1500.h5ad
+2026-04-03 10:02:02,450 | INFO | SFEvaluateRange | Evaluating epoch 1600 with ckpt_1600.pth
+2026-04-03 10:02:17,321 | INFO | SFEvaluateRange | Eval metrics (epoch_1600) | checkpoint=ckpt_1600.pth | epoch=Epoch 1600 | latent_moran=0.3918 | cluster_moran=0.6660
+2026-04-03 10:02:17,321 | INFO | SFEvaluateRange | GT metrics (epoch_1600) | checkpoint=ckpt_1600.pth | epoch=Epoch 1600 | ARI=0.5066 | NMI=0.6087 | AMI=0.6016 | HOM=0.6539 | n_valid=2129
+2026-04-03 10:02:17,322 | INFO | SFEvaluateRange | Artifacts (epoch_1600): ./results/tuning/e13/figures/spatial_analysis_epoch_1600.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_1600.h5ad
+2026-04-03 10:02:17,322 | INFO | SFEvaluateRange | Evaluating epoch 1700 with ckpt_1700.pth
+2026-04-03 10:02:31,665 | INFO | SFEvaluateRange | Eval metrics (epoch_1700) | checkpoint=ckpt_1700.pth | epoch=Epoch 1700 | latent_moran=0.3931 | cluster_moran=0.6506
+2026-04-03 10:02:31,665 | INFO | SFEvaluateRange | GT metrics (epoch_1700) | checkpoint=ckpt_1700.pth | epoch=Epoch 1700 | ARI=0.4508 | NMI=0.6024 | AMI=0.5952 | HOM=0.6559 | n_valid=2129
+2026-04-03 10:02:31,666 | INFO | SFEvaluateRange | Artifacts (epoch_1700): ./results/tuning/e13/figures/spatial_analysis_epoch_1700.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_1700.h5ad
+2026-04-03 10:02:31,666 | INFO | SFEvaluateRange | Evaluating epoch 1800 with ckpt_1800.pth
+2026-04-03 10:02:46,219 | INFO | SFEvaluateRange | Eval metrics (epoch_1800) | checkpoint=ckpt_1800.pth | epoch=Epoch 1800 | latent_moran=0.3943 | cluster_moran=0.6539
+2026-04-03 10:02:46,220 | INFO | SFEvaluateRange | GT metrics (epoch_1800) | checkpoint=ckpt_1800.pth | epoch=Epoch 1800 | ARI=0.3595 | NMI=0.5836 | AMI=0.5762 | HOM=0.6349 | n_valid=2129
+2026-04-03 10:02:46,220 | INFO | SFEvaluateRange | Artifacts (epoch_1800): ./results/tuning/e13/figures/spatial_analysis_epoch_1800.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_1800.h5ad
+2026-04-03 10:02:46,220 | INFO | SFEvaluateRange | Evaluating epoch 1900 with ckpt_1900.pth
+2026-04-03 10:03:00,211 | INFO | SFEvaluateRange | Eval metrics (epoch_1900) | checkpoint=ckpt_1900.pth | epoch=Epoch 1900 | latent_moran=0.3948 | cluster_moran=0.6616
+2026-04-03 10:03:00,212 | INFO | SFEvaluateRange | GT metrics (epoch_1900) | checkpoint=ckpt_1900.pth | epoch=Epoch 1900 | ARI=0.3626 | NMI=0.5802 | AMI=0.5727 | HOM=0.6332 | n_valid=2129
+2026-04-03 10:03:00,212 | INFO | SFEvaluateRange | Artifacts (epoch_1900): ./results/tuning/e13/figures/spatial_analysis_epoch_1900.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_1900.h5ad
+2026-04-03 10:03:00,212 | INFO | SFEvaluateRange | Evaluating epoch 2000 with ckpt_best.pth
+2026-04-03 10:03:16,771 | INFO | SFEvaluateRange | Eval metrics (epoch_2000_best) | checkpoint=ckpt_best.pth | epoch=Epoch 2000 (BEST) | latent_moran=0.4041 | cluster_moran=0.6772
+2026-04-03 10:03:16,771 | INFO | SFEvaluateRange | GT metrics (epoch_2000_best) | checkpoint=ckpt_best.pth | epoch=Epoch 2000 (BEST) | ARI=0.5114 | NMI=0.6024 | AMI=0.5952 | HOM=0.6468 | n_valid=2129
+2026-04-03 10:03:16,772 | INFO | SFEvaluateRange | Artifacts (epoch_2000_best): ./results/tuning/e13/figures/spatial_analysis_epoch_2000_best.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2000_best.h5ad
+2026-04-03 10:03:16,772 | INFO | SFEvaluateRange | Evaluating epoch 2100 with ckpt_2100.pth
+2026-04-03 10:03:33,483 | INFO | SFEvaluateRange | Eval metrics (epoch_2100) | checkpoint=ckpt_2100.pth | epoch=Epoch 2100 | latent_moran=0.3971 | cluster_moran=0.6740
+2026-04-03 10:03:33,483 | INFO | SFEvaluateRange | GT metrics (epoch_2100) | checkpoint=ckpt_2100.pth | epoch=Epoch 2100 | ARI=0.3548 | NMI=0.5853 | AMI=0.5779 | HOM=0.6426 | n_valid=2129
+2026-04-03 10:03:33,484 | INFO | SFEvaluateRange | Artifacts (epoch_2100): ./results/tuning/e13/figures/spatial_analysis_epoch_2100.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2100.h5ad
+2026-04-03 10:03:33,484 | INFO | SFEvaluateRange | Evaluating epoch 2200 with ckpt_2200.pth
+2026-04-03 10:03:47,169 | INFO | SFEvaluateRange | Eval metrics (epoch_2200) | checkpoint=ckpt_2200.pth | epoch=Epoch 2200 | latent_moran=0.3981 | cluster_moran=0.6681
+2026-04-03 10:03:47,169 | INFO | SFEvaluateRange | GT metrics (epoch_2200) | checkpoint=ckpt_2200.pth | epoch=Epoch 2200 | ARI=0.5143 | NMI=0.6154 | AMI=0.6084 | HOM=0.6583 | n_valid=2129
+2026-04-03 10:03:47,169 | INFO | SFEvaluateRange | Artifacts (epoch_2200): ./results/tuning/e13/figures/spatial_analysis_epoch_2200.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2200.h5ad
+2026-04-03 10:03:47,169 | INFO | SFEvaluateRange | Evaluating epoch 2300 with ckpt_2300.pth
+2026-04-03 10:04:02,532 | INFO | SFEvaluateRange | Eval metrics (epoch_2300) | checkpoint=ckpt_2300.pth | epoch=Epoch 2300 | latent_moran=0.3998 | cluster_moran=0.6628
+2026-04-03 10:04:02,533 | INFO | SFEvaluateRange | GT metrics (epoch_2300) | checkpoint=ckpt_2300.pth | epoch=Epoch 2300 | ARI=0.3512 | NMI=0.5806 | AMI=0.5731 | HOM=0.6336 | n_valid=2129
+2026-04-03 10:04:02,533 | INFO | SFEvaluateRange | Artifacts (epoch_2300): ./results/tuning/e13/figures/spatial_analysis_epoch_2300.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2300.h5ad
+2026-04-03 10:04:02,533 | INFO | SFEvaluateRange | Evaluating epoch 2400 with ckpt_2400.pth
+2026-04-03 10:04:17,345 | INFO | SFEvaluateRange | Eval metrics (epoch_2400) | checkpoint=ckpt_2400.pth | epoch=Epoch 2400 | latent_moran=0.4010 | cluster_moran=0.6632
+2026-04-03 10:04:17,346 | INFO | SFEvaluateRange | GT metrics (epoch_2400) | checkpoint=ckpt_2400.pth | epoch=Epoch 2400 | ARI=0.3936 | NMI=0.5906 | AMI=0.5832 | HOM=0.6384 | n_valid=2129
+2026-04-03 10:04:17,346 | INFO | SFEvaluateRange | Artifacts (epoch_2400): ./results/tuning/e13/figures/spatial_analysis_epoch_2400.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2400.h5ad
+2026-04-03 10:04:17,346 | INFO | SFEvaluateRange | Evaluating epoch 2500 with ckpt_2500.pth
+2026-04-03 10:04:30,821 | INFO | SFEvaluateRange | Eval metrics (epoch_2500) | checkpoint=ckpt_2500.pth | epoch=Epoch 2500 | latent_moran=0.4013 | cluster_moran=0.6516
+2026-04-03 10:04:30,821 | INFO | SFEvaluateRange | GT metrics (epoch_2500) | checkpoint=ckpt_2500.pth | epoch=Epoch 2500 | ARI=0.4355 | NMI=0.5916 | AMI=0.5843 | HOM=0.6422 | n_valid=2129
+2026-04-03 10:04:30,822 | INFO | SFEvaluateRange | Artifacts (epoch_2500): ./results/tuning/e13/figures/spatial_analysis_epoch_2500.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2500.h5ad
+2026-04-03 10:04:30,822 | INFO | SFEvaluateRange | Evaluating epoch 2600 with ckpt_2600.pth
+2026-04-03 10:04:44,226 | INFO | SFEvaluateRange | Eval metrics (epoch_2600) | checkpoint=ckpt_2600.pth | epoch=Epoch 2600 | latent_moran=0.4019 | cluster_moran=0.6604
+2026-04-03 10:04:44,226 | INFO | SFEvaluateRange | GT metrics (epoch_2600) | checkpoint=ckpt_2600.pth | epoch=Epoch 2600 | ARI=0.4270 | NMI=0.5818 | AMI=0.5743 | HOM=0.6303 | n_valid=2129
+2026-04-03 10:04:44,226 | INFO | SFEvaluateRange | Artifacts (epoch_2600): ./results/tuning/e13/figures/spatial_analysis_epoch_2600.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2600.h5ad
+2026-04-03 10:04:44,227 | INFO | SFEvaluateRange | Evaluating epoch 2700 with ckpt_2700.pth
+2026-04-03 10:04:59,710 | INFO | SFEvaluateRange | Eval metrics (epoch_2700) | checkpoint=ckpt_2700.pth | epoch=Epoch 2700 | latent_moran=0.4029 | cluster_moran=0.6721
+2026-04-03 10:04:59,711 | INFO | SFEvaluateRange | GT metrics (epoch_2700) | checkpoint=ckpt_2700.pth | epoch=Epoch 2700 | ARI=0.5180 | NMI=0.6069 | AMI=0.5997 | HOM=0.6515 | n_valid=2129
+2026-04-03 10:04:59,711 | INFO | SFEvaluateRange | Artifacts (epoch_2700): ./results/tuning/e13/figures/spatial_analysis_epoch_2700.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2700.h5ad
+2026-04-03 10:04:59,711 | INFO | SFEvaluateRange | Evaluating epoch 2800 with ckpt_2800.pth
+2026-04-03 10:05:12,895 | INFO | SFEvaluateRange | Eval metrics (epoch_2800) | checkpoint=ckpt_2800.pth | epoch=Epoch 2800 | latent_moran=0.4028 | cluster_moran=0.6828
+2026-04-03 10:05:12,895 | INFO | SFEvaluateRange | GT metrics (epoch_2800) | checkpoint=ckpt_2800.pth | epoch=Epoch 2800 | ARI=0.3705 | NMI=0.5842 | AMI=0.5768 | HOM=0.6366 | n_valid=2129
+2026-04-03 10:05:12,896 | INFO | SFEvaluateRange | Artifacts (epoch_2800): ./results/tuning/e13/figures/spatial_analysis_epoch_2800.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2800.h5ad
+2026-04-03 10:05:12,896 | INFO | SFEvaluateRange | Evaluating epoch 2900 with ckpt_2900.pth
+2026-04-03 10:05:26,642 | INFO | SFEvaluateRange | Eval metrics (epoch_2900) | checkpoint=ckpt_2900.pth | epoch=Epoch 2900 | latent_moran=0.4042 | cluster_moran=0.6730
+2026-04-03 10:05:26,642 | INFO | SFEvaluateRange | GT metrics (epoch_2900) | checkpoint=ckpt_2900.pth | epoch=Epoch 2900 | ARI=0.5080 | NMI=0.6149 | AMI=0.6079 | HOM=0.6582 | n_valid=2129
+2026-04-03 10:05:26,642 | INFO | SFEvaluateRange | Artifacts (epoch_2900): ./results/tuning/e13/figures/spatial_analysis_epoch_2900.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_2900.h5ad
+2026-04-03 10:05:26,643 | INFO | SFEvaluateRange | Evaluating epoch 3000 with ckpt_3000.pth
+2026-04-03 10:05:42,208 | INFO | SFEvaluateRange | Eval metrics (epoch_3000) | checkpoint=ckpt_3000.pth | epoch=Epoch 3000 | latent_moran=0.4042 | cluster_moran=0.6744
+2026-04-03 10:05:42,208 | INFO | SFEvaluateRange | GT metrics (epoch_3000) | checkpoint=ckpt_3000.pth | epoch=Epoch 3000 | ARI=0.5142 | NMI=0.6016 | AMI=0.5943 | HOM=0.6459 | n_valid=2129
+2026-04-03 10:05:42,208 | INFO | SFEvaluateRange | Artifacts (epoch_3000): ./results/tuning/e13/figures/spatial_analysis_epoch_3000.pdf | ./results/tuning/e13/predictions/embedding_joint_epoch_3000.h5ad
+2026-04-03 10:05:42,209 | INFO | SFEvaluateRange | Range evaluation complete. Success=16 | Failed/Skipped=0
+
+========================================================================================

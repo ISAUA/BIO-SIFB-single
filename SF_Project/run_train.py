@@ -92,6 +92,7 @@ def main():
     # 以预处理后的实际维度覆盖配置，避免 PCA 维度变更导致不匹配
     config['model']['rna_in_dim'] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim)
+    os.makedirs(config['project']['save_dir'], exist_ok=True)
 
     # --- 新增用于排查的测试代码 ---
     test_weight_path = os.path.join(config['project']['save_dir'], "init_weights_test.pth")

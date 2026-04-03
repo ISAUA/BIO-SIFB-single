@@ -48,7 +48,7 @@ data:                                 # 数据配置
     atac_target_sum: 1e4              # ATAC 归一化目标总和
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
-    knn_k: 10                          # 空间图 k 近邻
+    knn_k: 6                          # 空间图 k 近邻
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置

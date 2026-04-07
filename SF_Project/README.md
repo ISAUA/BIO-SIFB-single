@@ -102,25 +102,12 @@ python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yam
 - 当轮次等于 `--best-epoch` 时，自动使用 `ckpt_best.pth`。
 - PDF 输出在 `results/misar/<dataset>/figures/`，h5ad 输出在 `results/misar/<dataset>/predictions/`（MISAR 数据集）。
 
-## e15.5 自动调参（数据集隔离）
+## 自动调参（自然语言工作流）
 
-说明：该流程会自动管理 `KNN` 与 `ino_pre_smooth_alpha`，并固定 `ino_use_edge_weight=true`、`ino_pre_smooth_enable=true`。
+说明：项目不再提供 `run_tuning_e15_5_s1.py` 脚本入口，建议使用自然语言工作流执行调参。
 
-```bash
-source ~/.bashrc
-conda activate sc_bridge
-cd SF_Project
-python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --knn-list 8,9,10 --alpha-list 0.7,0.8,0.9
-```
-
-可选参数示例：
-
-```bash
-python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --max-runs 1
-python run_tuning_e15_5_s1.py --dataset-tag e15_5_s1 --skip-existing
-```
-
-全局实验追踪 CSV：`results/experiments_global.csv`。
+- 推荐模板：`TUNING_NL_PROMPT_TEMPLATE.md`
+- 全局实验追踪 CSV：`results/experiments_global.csv`
 
 ## 数据集配置文件
 

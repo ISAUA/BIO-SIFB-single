@@ -1,12 +1,12 @@
 project:
-  name: TUNE_e15_5_s1_k10_a0p9
+  name: TUNE_e11_0_s1_k9_a0p7
   version: 1.0.0
   seed: 42
-  save_dir: ./results/e15_5_s1/tuning/k10_a0p9/checkpoints/
-  eval_dir: ./results/e15_5_s1/tuning/k10_a0p9/predictions/
+  save_dir: ./results/e11_0_s1/tuning/k9_a0p7/checkpoints/
+  eval_dir: ./results/e11_0_s1/tuning/k9_a0p7/predictions/
 eval:
   checkpoint: best
-  n_clusters: 14
+  n_clusters: 7
   mclust_pca_dim: 20
   resolution: 0.9
   moran_k: 6
@@ -27,8 +27,8 @@ eval:
     best: ckpt_best.pth
     final: ckpt_300.pth
 data:
-  raw_path: data/raw/misar/misar_e15-5-s1
-  processed_path: data/processed/e15_5_s1/tuning/k10_a0p9
+  raw_path: data/raw/misar/misar_e11_0-s1
+  processed_path: data/processed/e11_0_s1/tuning/k9_a0p7
   files:
     rna_h5ad: adata_RNA.h5ad
     atac_h5ad: adata_Peak.h5ad
@@ -50,7 +50,7 @@ data:
     atac_target_sum: 1e4
     tfidf_eps: 1e-6
     tss_window: 150000
-    knn_k: 10
+    knn_k: 9
     ground_truth_key: Combined_Clusters
 model:
   name: SFNet
@@ -67,7 +67,7 @@ model:
   sfib_ino_layers: 2
   ino_use_edge_weight: true
   ino_pre_smooth_enable: true
-  ino_pre_smooth_alpha: 0.9
+  ino_pre_smooth_alpha: 0.7
   proj_hidden_dim: 64
   proj_output_dim: 64
   rna_dec_hidden: 512

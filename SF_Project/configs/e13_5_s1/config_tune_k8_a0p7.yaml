@@ -1,9 +1,9 @@
 project:
-  name: TUNE_e15_5_s1_k8_a0p7
+  name: TUNE_e13_5_s1_k8_a0p7
   version: 1.0.0
   seed: 42
-  save_dir: ./results/e15_5_s1/tuning/k8_a0p7/checkpoints/
-  eval_dir: ./results/e15_5_s1/tuning/k8_a0p7/predictions/
+  save_dir: ./results/e13_5_s1/tuning/k8_a0p7/checkpoints/
+  eval_dir: ./results/e13_5_s1/tuning/k8_a0p7/predictions/
 eval:
   checkpoint: best
   n_clusters: 14
@@ -27,8 +27,8 @@ eval:
     best: ckpt_best.pth
     final: ckpt_300.pth
 data:
-  raw_path: data/raw/misar/misar_e15-5-s1
-  processed_path: data/processed/e15_5_s1/tuning/k8_a0p7
+  raw_path: data/raw/misar/misar_e13_5-s1
+  processed_path: data/processed/e13_5_s1/tuning/k8_a0p7
   files:
     rna_h5ad: adata_RNA.h5ad
     atac_h5ad: adata_Peak.h5ad

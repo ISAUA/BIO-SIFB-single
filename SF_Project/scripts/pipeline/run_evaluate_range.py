@@ -405,6 +405,7 @@ def main():
     logger.info("[Range Evaluate] Started. epochs=%s", epochs)
 
     n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get("n_clusters", 7))
+    compute_gt_metrics = bool(eval_cfg.get("compute_gt_metrics", True))
     mclust_pca_dim = int(eval_cfg.get("mclust_pca_dim", 20))
     moran_k = int(eval_cfg.get("moran_k", 6))
     plot_cfg = eval_cfg.get("plotting", {})
@@ -434,6 +435,9 @@ def main():
     rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
     atac_dim = data_dict["atac_dim"]
     ground_truth = data_dict.get("ground_truth", None)
+    if not compute_gt_metrics:
+        ground_truth = None
+        logger.info("GT metrics disabled by config: eval.compute_gt_metrics=false")
 
     logger.info("Initializing model...")
     config["model"]["rna_in_dim"] = rna_dim

@@ -467,6 +467,7 @@ def main():
     # 4. 加载权重
     eval_cfg = config.get('eval', {})
     plot_cfg = eval_cfg.get('plotting', {})
+    compute_gt_metrics = bool(eval_cfg.get('compute_gt_metrics', True))
     n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get('n_clusters', 7))
     mclust_pca_dim = int(eval_cfg.get('mclust_pca_dim', 20))
     moran_k = int(eval_cfg.get('moran_k', 6))
@@ -475,6 +476,10 @@ def main():
     # 如果 key 存在映射则取映射，否则允许直接把文件名作为 key 使用
     ckpt_name = ckpt_map.get(ckpt_key, ckpt_key)
     ckpt_path = os.path.join(save_dir, ckpt_name)
+
+    if not compute_gt_metrics:
+        ground_truth = None
+        logger.info("GT metrics disabled by config: eval.compute_gt_metrics=false")
     
     if not os.path.exists(ckpt_path):
         logger.error("Checkpoint not found at %s", ckpt_path)

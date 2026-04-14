@@ -179,13 +179,23 @@ def build_spatial_graph(coords, features=None, k=6, device=None):
 def set_seed(seed: int = 42, deterministic: bool = True):
     """全局锁定随机种子，尽可能消除非确定性。"""
     seed = int(seed)
+
+    def _ensure_positive_thread_env(var_name: str):
+        value = os.environ.get(var_name)
+        try:
+            valid = value is not None and int(str(value).strip()) > 0
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            os.environ[var_name] = "1"
+
     # CUDA + CuBLAS 在 deterministic 模式下需要该环境变量。
     os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     # 线程库并行会引入浮点规约顺序差异，固定为单线程更稳定。
-    os.environ.setdefault("OMP_NUM_THREADS", "1")
-    os.environ.setdefault("MKL_NUM_THREADS", "1")
-    os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
-    os.environ.setdefault("NUMEXPR_NUM_THREADS", "1")
+    _ensure_positive_thread_env("OMP_NUM_THREADS")
+    _ensure_positive_thread_env("MKL_NUM_THREADS")
+    _ensure_positive_thread_env("OPENBLAS_NUM_THREADS")
+    _ensure_positive_thread_env("NUMEXPR_NUM_THREADS")
     os.environ["PYTHONHASHSEED"] = str(seed)
     random.seed(seed)
     np.random.seed(seed)

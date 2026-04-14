@@ -96,9 +96,17 @@ SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.
 python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
 ```
 
+小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：
+
+```bash
+python run_evaluate_range_p22.py --start 1500 --end 3000 --step 100
+```
+
 说明：
 
 - `--start/--end/--step` 可自定义评估区间。
+- 小鼠 P22 专用脚本固定使用 `configs/config_mouse_brain_p22.yaml`，无需再传配置路径。
+- 小鼠 P22 专用脚本会输出区间内每个轮次的 cluster Moran 指数 CSV，并自动选择 cluster Moran 指数最高的轮次出图。
 - 当轮次等于 `--best-epoch` 时，自动使用 `ckpt_best.pth`。
 - PDF 输出在 `results/misar/<dataset>/figures/`，h5ad 输出在 `results/misar/<dataset>/predictions/`（MISAR 数据集）。
 

@@ -9,6 +9,21 @@ import yaml
 import numpy as np
 import pandas as pd
 
+
+def _sanitize_thread_env_vars():
+    """Prevent libgomp warnings from invalid thread env values (e.g. 0/empty)."""
+    for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        value = os.environ.get(key)
+        try:
+            valid = value is not None and int(str(value).strip()) > 0
+        except (TypeError, ValueError):
+            valid = False
+        if not valid:
+            os.environ[key] = "1"
+
+
+_sanitize_thread_env_vars()
+
 warnings.filterwarnings("ignore", message="pkg_resources is deprecated as an API.*", category=UserWarning)
 warnings.filterwarnings("ignore", message="nopython is set for njit and is ignored", category=RuntimeWarning)
 warnings.filterwarnings("ignore", message=".*TBB threading layer.*")
@@ -246,7 +261,12 @@ def visualize_and_save(
     pca_model = PCA(n_components=pca_dim, random_state=int(seed))
     z_pca = pca_model.fit_transform(z_final)
 
-    res = rmclust(rpy2.robjects.numpy2ri.numpy2rpy(z_pca), int(n_clusters), 'EEE')
+    res = rmclust(
+        rpy2.robjects.numpy2ri.numpy2rpy(z_pca),
+        int(n_clusters),
+        'EEE',
+        verbose=False,
+    )
     mclust_res = extract_mclust_labels(res)
     adata.obs['cluster'] = mclust_res
 

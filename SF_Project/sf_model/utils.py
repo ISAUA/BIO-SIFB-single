@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
+from scipy.sparse.linalg import ArpackNoConvergence, eigsh
 from sklearn.neighbors import NearestNeighbors
 
 # def build_spatial_graph(coords, k=10):
@@ -67,7 +68,7 @@ from sklearn.neighbors import NearestNeighbors
 #     return edge_index, u_basis
 
 
-def build_spatial_graph(coords, features=None, k=6, device=None):
+def build_spatial_graph(coords, features=None, k=6, device=None, n_freq_components=None):
     """
     构建空间 KNN 图并计算 GFT 基底。
     - 默认：RNA 特征欧氏距离 + 高斯核衰减 (features 不为 None 时)
@@ -159,13 +160,42 @@ def build_spatial_graph(coords, features=None, k=6, device=None):
     d_mat_inv_sqrt = sp.diags(d_inv_sqrt)
     
     normalized_adj = d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt)
-    laplacian = sp.eye(N) - normalized_adj
-    
-    # 5. 特征分解提取频率基底
-    evals, evecs = np.linalg.eigh(laplacian.toarray())
+    laplacian = (sp.eye(N, format="csr") - normalized_adj).tocsr()
+
+    # 5. 特征分解提取频率基底（支持低频截断）
+    if n_freq_components is None:
+        target_k = int(N)
+    else:
+        target_k = int(n_freq_components)
+        if target_k <= 0:
+            raise ValueError(f"n_freq_components must be positive, got {target_k}.")
+        target_k = min(target_k, int(N))
+
+    if target_k >= N:
+        evals, evecs = np.linalg.eigh(laplacian.toarray())
+    else:
+        # eigsh 要求 k < N；which='SM' 获取低频（最小特征值）分量
+        eig_k = min(target_k, N - 1)
+        try:
+            evals, evecs = eigsh(
+                laplacian,
+                k=eig_k,
+                which="SM",
+                v0=np.ones(N, dtype=np.float64),
+                tol=0.0,
+            )
+        except ArpackNoConvergence as e:
+            if e.eigenvalues is None or e.eigenvectors is None or e.eigenvalues.size == 0:
+                raise
+            evals, evecs = e.eigenvalues, e.eigenvectors
+
     idx = np.argsort(evals)
-    evals = evals[idx]
-    evecs = evecs[:, idx]
+    evals = np.asarray(evals[idx], dtype=np.float32)
+    evecs = np.asarray(evecs[:, idx], dtype=np.float32)
+
+    if target_k < evecs.shape[1]:
+        evals = evals[:target_k]
+        evecs = evecs[:, :target_k]
     
     u_basis = torch.FloatTensor(evecs)
     evals = torch.FloatTensor(evals).to(target_device)

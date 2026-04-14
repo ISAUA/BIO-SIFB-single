@@ -137,6 +137,7 @@ def main():
     tfidf_eps = float(params.get('tfidf_eps', 1e-6))
     seed = int(config['project'].get('seed', 42))
     reduce_cfg = params.get('reduce', {})
+    n_freq_components = params.get('n_freq_components', config.get('model', {}).get('n_freq_components', None))
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -306,7 +307,12 @@ def main():
     coords = adata_rna.obsm['spatial']
     # 默认：使用降维后的 RNA 特征构建加权图
     rna_features = rna_feat_np
-    graph_outputs = build_spatial_graph(coords, features=rna_features, k=params['knn_k'])
+    graph_outputs = build_spatial_graph(
+        coords,
+        features=rna_features,
+        k=params['knn_k'],
+        n_freq_components=n_freq_components,
+    )
     if len(graph_outputs) == 4:
         edge_index, edge_weight, u_basis, evals = graph_outputs
     elif len(graph_outputs) == 3:
@@ -361,6 +367,8 @@ def main():
 
     if evals is not None:
         data_dict["evals"] = evals
+
+    data_dict["n_freq_components"] = int(u_basis.shape[1])
 
     if ground_truth is not None:
         data_dict["ground_truth"] = ground_truth

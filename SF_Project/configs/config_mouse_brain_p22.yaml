@@ -54,6 +54,7 @@ data:
 
 model:
   name: "SFNet"
+  n_freq_components: 3000
   rna_in_dim: 3000
   hidden_dim: 512
   rna_n_heads: 4

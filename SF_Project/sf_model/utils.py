@@ -5,7 +5,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
-from scipy.sparse.linalg import ArpackNoConvergence, eigsh
 from sklearn.neighbors import NearestNeighbors
 
 # def build_spatial_graph(coords, k=10):
@@ -162,7 +161,7 @@ def build_spatial_graph(coords, features=None, k=6, device=None, n_freq_componen
     normalized_adj = d_mat_inv_sqrt.dot(adj).dot(d_mat_inv_sqrt)
     laplacian = (sp.eye(N, format="csr") - normalized_adj).tocsr()
 
-    # 5. 特征分解提取频率基底（支持低频截断）
+    # 5. 全量密集特征分解后再做低频截断
     if n_freq_components is None:
         target_k = int(N)
     else:
@@ -171,31 +170,14 @@ def build_spatial_graph(coords, features=None, k=6, device=None, n_freq_componen
             raise ValueError(f"n_freq_components must be positive, got {target_k}.")
         target_k = min(target_k, int(N))
 
-    if target_k >= N:
-        evals, evecs = np.linalg.eigh(laplacian.toarray())
-    else:
-        # eigsh 要求 k < N；which='SM' 获取低频（最小特征值）分量
-        eig_k = min(target_k, N - 1)
-        try:
-            evals, evecs = eigsh(
-                laplacian,
-                k=eig_k,
-                which="SM",
-                v0=np.ones(N, dtype=np.float64),
-                tol=0.0,
-            )
-        except ArpackNoConvergence as e:
-            if e.eigenvalues is None or e.eigenvectors is None or e.eigenvalues.size == 0:
-                raise
-            evals, evecs = e.eigenvalues, e.eigenvectors
+    evals, evecs = np.linalg.eigh(laplacian.toarray())
 
     idx = np.argsort(evals)
     evals = np.asarray(evals[idx], dtype=np.float32)
     evecs = np.asarray(evecs[:, idx], dtype=np.float32)
 
-    if target_k < evecs.shape[1]:
-        evals = evals[:target_k]
-        evecs = evecs[:, :target_k]
+    evals = evals[:target_k]
+    evecs = evecs[:, :target_k]
     
     u_basis = torch.FloatTensor(evecs)
     evals = torch.FloatTensor(evals).to(target_device)
@@ -257,7 +239,7 @@ class CLIPLoss(nn.Module):
         init = torch.log(torch.tensor(float(temperature)))
         self.log_temperature = nn.Parameter(init)
 
-    def forward(self, z_rna, z_atac):
+    def forward(self, z_rna, z_atac, edge_index=None):
         # L2 Normalize
         z_rna = F.normalize(z_rna, dim=1)
         z_atac = F.normalize(z_atac, dim=1)
@@ -265,6 +247,13 @@ class CLIPLoss(nn.Module):
         # Similarity Matrix
         temperature = self.log_temperature.exp().clamp(min=1e-3, max=10.0)
         logits = torch.matmul(z_rna, z_atac.T) / temperature
+
+        if edge_index is not None:
+            edge_index = edge_index.to(device=logits.device, dtype=torch.long)
+            mask = torch.zeros_like(logits, dtype=torch.bool)
+            mask[edge_index[0], edge_index[1]] = True
+            mask.fill_diagonal_(False)
+            logits = logits.masked_fill(mask, -1e9)
         
         # Labels: Diagonal is positive pair
         batch_size = z_rna.shape[0]

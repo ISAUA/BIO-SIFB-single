@@ -138,6 +138,7 @@ def main():
     seed = int(config['project'].get('seed', 42))
     reduce_cfg = params.get('reduce', {})
     n_freq_components = params.get('n_freq_components', config.get('model', {}).get('n_freq_components', None))
+    use_rna_similarity_edge_weight = bool(params.get('use_rna_similarity_edge_weight', True))
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -303,10 +304,17 @@ def main():
     # ==========================================
     # Step 4: 构建空间图 & 准备 Tensor  #根据knn引入权重
     # ==========================================
-    print("\n🕸️ Building Spatial Graph & GFT Basis with Feature Weights...")
+    print("\n🕸️ Building Spatial Graph & GFT Basis...")
     coords = adata_rna.obsm['spatial']
-    # 默认：使用降维后的 RNA 特征构建加权图
-    rna_features = rna_feat_np
+    # 可选：使用降维后的 RNA 特征计算边权重；关闭时退化为仅拓扑（无 RNA 相似度加权）
+    rna_features = rna_feat_np if use_rna_similarity_edge_weight else None
+    if use_rna_similarity_edge_weight:
+        print("   ✅ Edge weight mode: RNA feature similarity")
+        logger.info("Edge weight mode: RNA feature similarity")
+    else:
+        print("   ✅ Edge weight mode: topology only (RNA similarity disabled)")
+        logger.info("Edge weight mode: topology only (RNA similarity disabled)")
+
     graph_outputs = build_spatial_graph(
         coords,
         features=rna_features,

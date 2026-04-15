@@ -112,15 +112,30 @@ class SFTrainer:
         # 2. 对齐损失
         clip_weight = self.get_current_clip_weight(epoch)
         if clip_weight > 0.0:
-            loss_clip = self.clip_criterion(p_rna, p_atac)
+            loss_clip = self.clip_criterion(p_rna, p_atac, edge_index=edge_index)
         else:
             loss_clip = torch.tensor(0.0, device=self.device)
         
         lambda_r = float(self.train_cfg.get('lambda_rna', 1.0))
         lambda_a = float(self.train_cfg.get('lambda_atac', 1.0))
         lambda_c = clip_weight
+        lambda_smooth = float(self.train_cfg.get('lambda_smooth', 1.0))
+
+        # Dirichlet energy / spatial smoothness on graph edges:
+        # enforce neighboring nodes to have similar fused embeddings.
+        if edge_index.numel() > 0:
+            src_feat = z_fused[edge_index[0]]
+            dst_feat = z_fused[edge_index[1]]
+            loss_smooth = F.mse_loss(src_feat, dst_feat)
+        else:
+            loss_smooth = torch.tensor(0.0, device=self.device)
         
-        total_loss = lambda_r * loss_rec_rna + lambda_a * loss_rec_atac + lambda_c * loss_clip
+        total_loss = (
+            lambda_r * loss_rec_rna
+            + lambda_a * loss_rec_atac
+            + lambda_c * loss_clip
+            + lambda_smooth * loss_smooth
+        )
         
         total_loss.backward()
         self.optimizer.step()
@@ -130,7 +145,9 @@ class SFTrainer:
             "rec_rna": loss_rec_rna.item(),
             "rec_atac": loss_rec_atac.item(),
             "clip": loss_clip.item(),
-            "clip_weight": clip_weight
+            "smooth": loss_smooth.item(),
+            "clip_weight": clip_weight,
+            "smooth_weight": lambda_smooth,
         }
 
     def run(self, rna_data, atac_data, edge_index, u_basis, evals=None, edge_weight=None):
@@ -155,20 +172,24 @@ class SFTrainer:
                 rec_rna=f"{metrics['rec_rna']:.4f}",
                 rec_atac=f"{metrics['rec_atac']:.4f}",
                 clip=f"{metrics['clip']:.4f}",
+                smooth=f"{metrics['smooth']:.4f}",
                 w_clip=f"{metrics['clip_weight']:.3f}",
+                w_smooth=f"{metrics['smooth_weight']:.3f}",
                 best=f"{best_loss:.4f}",
                 lr=f"{current_lr:.2e}",
             )
 
             if epoch % self.log_interval == 0:
                 self.logger.info(
-                    "Epoch %03d | total %.4f | rec_rna %.4f | rec_atac %.4f | clip %.4f | clip_weight %.4f | lr %.2e | best %.4f",
+                    "Epoch %03d | total %.4f | rec_rna %.4f | rec_atac %.4f | clip %.4f | smooth %.4f | clip_weight %.4f | smooth_weight %.4f | lr %.2e | best %.4f",
                     epoch,
                     metrics['total'],
                     metrics['rec_rna'],
                     metrics['rec_atac'],
                     metrics['clip'],
+                    metrics['smooth'],
                     metrics['clip_weight'],
+                    metrics['smooth_weight'],
                     current_lr,
                     best_loss,
                 )

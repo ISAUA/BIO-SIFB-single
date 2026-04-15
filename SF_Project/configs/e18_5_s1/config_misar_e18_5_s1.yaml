@@ -49,10 +49,12 @@ data:                                 # 数据配置
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
     knn_k: 9                          # 空间图 k 近邻
+    use_rna_similarity_edge_weight: true  # 是否启用基于 RNA 相似度的边权重
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
+  n_freq_components: 3000             # 高频傅里叶特征数
   rna_in_dim: 3000                    # RNA 输入维度
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数

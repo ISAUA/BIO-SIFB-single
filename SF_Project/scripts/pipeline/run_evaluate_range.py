@@ -219,6 +219,8 @@ def visualize_and_save(
     plot_cfg=None,
     checkpoint_name=None,
     seed=42,
+    moran_mode="both",
+    precomputed_cluster_moran=None,
 ):
     if isinstance(z_final, torch.Tensor):
         z_final = z_final.cpu().numpy()
@@ -227,7 +229,6 @@ def visualize_and_save(
 
     adata = sc.AnnData(X=z_final)
     coords_plot = coords.copy()
-    coords_plot[:, 1] = -1.0 * coords_plot[:, 1]
     adata.obsm["spatial"] = coords_plot
 
     sc.pp.neighbors(adata, use_rep="X", random_state=int(seed))
@@ -261,20 +262,39 @@ def visualize_and_save(
     cluster_list = sorted(adata.obs["cluster"].unique(), key=lambda x: int(x))
     adata.obs["cluster"] = pd.Categorical(adata.obs["cluster"], categories=cluster_list, ordered=True)
 
+    moran_mode = str(moran_mode).strip().lower()
+    if moran_mode not in {"both", "cluster_only", "none"}:
+        raise ValueError(f"Unsupported moran_mode={moran_mode}. Use one of: both, cluster_only, none.")
+
     moran_title_str = ""
     mi_latent_avg = None
     mi_cluster_avg = None
     cluster_scores = None
     try:
-        mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
         cluster_labels = adata.obs["cluster"].values.astype(int)
-        num_clusters = np.max(cluster_labels) + 1
-        one_hot_clusters = np.eye(num_clusters)[cluster_labels]
-        mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
-        moran_title_str = (
-            f" | Latent Moran's I: {mi_latent_avg:.4f}"
-            f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
-        )
+
+        if moran_mode == "both":
+            mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
+            if precomputed_cluster_moran is None:
+                num_clusters = np.max(cluster_labels) + 1
+                one_hot_clusters = np.eye(num_clusters)[cluster_labels]
+                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
+            else:
+                mi_cluster_avg = float(precomputed_cluster_moran)
+
+            moran_title_str = (
+                f" | Latent Moran's I: {mi_latent_avg:.4f}"
+                f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
+            )
+        elif moran_mode == "cluster_only":
+            if precomputed_cluster_moran is None:
+                num_clusters = np.max(cluster_labels) + 1
+                one_hot_clusters = np.eye(num_clusters)[cluster_labels]
+                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
+            else:
+                mi_cluster_avg = float(precomputed_cluster_moran)
+
+            moran_title_str = f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
 
         cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
         if cluster_scores is not None:
@@ -503,6 +523,7 @@ def main():
             plot_cfg=plot_cfg,
             checkpoint_name=ckpt_name,
             seed=seed,
+            moran_mode="cluster_only",
         )
 
         abs_plot_path = os.path.abspath(plot_path)

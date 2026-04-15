@@ -27,6 +27,7 @@ cd SF_Project
 
 ```bash
 python run_pipeline.py --dataset misar_e18_5_s1
+python run_pipeline.py --dataset mouse_brain_p22
 ```
 
 ### 2) 仅运行部分阶段
@@ -99,7 +100,6 @@ python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yam
 小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：
 
 ```bash
-python run_evaluate_range_p22.py --start 1500 --end 3000 --step 100
 ```
 
 说明：

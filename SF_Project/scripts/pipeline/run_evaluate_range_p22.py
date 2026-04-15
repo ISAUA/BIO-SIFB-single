@@ -236,6 +236,8 @@ def main():
         plot_cfg=plot_cfg,
         checkpoint_name=best_ckpt_name,
         seed=seed,
+        moran_mode="cluster_only",
+        precomputed_cluster_moran=best_moran,
     )
 
     abs_plot_path = os.path.abspath(plot_path)

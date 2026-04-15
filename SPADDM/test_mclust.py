@@ -3,7 +3,7 @@ import squidpy as sq
 import numpy as np
 
 # 1. 加载您的 h5ad 文件
-adata = sc.read_h5ad("/root/autodl-tmp/BIO-SFIB-single/SPADDM/SpatialDDM_results_p22.h5ad")
+adata = sc.read_h5ad("/root/autodl-tmp/BIO-SFIB-single/SPADDM/spatialDDM_results_e11.h5ad")
 
 # 2. 获取 mclust 列中唯一类别的数量
 num_clusters = adata.obs['mclust'].nunique()

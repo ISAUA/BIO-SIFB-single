@@ -88,6 +88,33 @@ class StreamProjector(nn.Module):
         return self.net(x)
 
 
+class SF_Translator_R2A(nn.Module):
+    """Point-wise RNA->ATAC latent translator with residual skip."""
+
+    def __init__(self, hidden_dim: int, n_blocks: int = 3):
+        super().__init__()
+        hidden_dim = int(hidden_dim)
+        n_blocks = max(2, int(n_blocks))
+
+        blocks = []
+        for _ in range(n_blocks):
+            blocks.append(
+                nn.Sequential(
+                    nn.Linear(hidden_dim, hidden_dim),
+                    nn.LayerNorm(hidden_dim),
+                    nn.GELU(),
+                )
+            )
+        self.blocks = nn.ModuleList(blocks)
+
+    def forward(self, f_rna: torch.Tensor) -> torch.Tensor:
+        mapped = f_rna
+        for block in self.blocks:
+            mapped = block(mapped)
+        # Preserve RNA latent base to reduce collapse risk.
+        return f_rna + mapped
+
+
 class BioSFINet(nn.Module):
     def __init__(self, config, atac_dim):
         """Single-tower Symmetric Selective Fusion network."""

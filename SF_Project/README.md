@@ -37,6 +37,7 @@ python run_pipeline.py --dataset mouse_brain_p22
 ```bash
 python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
 python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess,train
+python run_pipeline.py --dataset mouse_brain_p22 --steps preprocess,train
 python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate
 ```
 
@@ -68,7 +69,7 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
 python run_pipeline.py --dataset misar_e18_5_s1 --steps train
 
 # evaluate
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_2100.pth --n-clusters 14
 ```
 
 ### 单阶段确定性启动（推荐）
@@ -78,6 +79,30 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ck
 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
+
+### 跨模态翻译训练（Stage 2: RNA -> ATAC）
+
+使用已训练好的主干 checkpoint，训练 `SF_Translator_R2A`：
+
+```bash
+python run_train_translator.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml
+python run_train_translator.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --backbone-checkpoint ckpt_2100.pth
+```
+
+常用可选参数（覆盖配置）：
+
+```bash
+python run_train_translator.py \
+	--config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+	--epochs 400 \
+	--lr 1e-4 \
+	--n-blocks 3 \
+	--lambda-cosine 1.0 \
+	--lambda-mse 1.0 \
+	--lambda-recon 1.0
+```
+
+输出默认保存在 `save_dir/translator_checkpoints/`，包含 best 与 last 权重文件。
 
 可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
 
@@ -100,6 +125,7 @@ python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yam
 小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：
 
 ```bash
+python run_evaluate_range_p22.py --start 2500 --end 2600 --step 100
 ```
 
 说明：
@@ -107,8 +133,8 @@ python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yam
 - `--start/--end/--step` 可自定义评估区间。
 - 小鼠 P22 专用脚本固定使用 `configs/config_mouse_brain_p22.yaml`，无需再传配置路径。
 - 小鼠 P22 专用脚本会输出区间内每个轮次的 cluster Moran 指数 CSV，并自动选择 cluster Moran 指数最高的轮次出图。
-- 当轮次等于 `--best-epoch` 时，自动使用 `ckpt_best.pth`。
-- PDF 输出在 `results/misar/<dataset>/figures/`，h5ad 输出在 `results/misar/<dataset>/predictions/`（MISAR 数据集）。
+- 若需要自定义配置文件路径，可追加 `--config <path>`。
+- 输出默认位于 `results/mouse_brain_p22/` 下（含图、h5ad 与区间评分 CSV）。
 
 ## 自动调参（自然语言工作流）
 

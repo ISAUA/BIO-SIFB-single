@@ -350,6 +350,11 @@ def visualize_and_save(
     for ax in axs:
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
 
+    # ========== 新增：根据数据集路径自动翻转 Y 轴 ==========
+    if "misar" in save_dir.lower():
+        axs[1].invert_yaxis()
+    # =======================================================
+
     if epoch_label:
         fig.text(0.5, 0.99, f"Weights: {epoch_label}{moran_title_str}", ha="center", va="top", fontsize=12)
 

@@ -55,7 +55,7 @@ data:
 
 model:
   name: "SFNet"
-  n_freq_components: 3000
+  n_freq_components: 2000
   rna_in_dim: 3000
   hidden_dim: 512
   rna_n_heads: 4
@@ -69,13 +69,13 @@ model:
   sfib_ino_layers: 2
   ino_use_edge_weight: true
   ino_pre_smooth_enable: true
-  ino_pre_smooth_alpha: 0.2
+  ino_pre_smooth_alpha: 0.5
   proj_hidden_dim: 64
   proj_output_dim: 64
   rna_dec_hidden: 512
-  rna_dec_blocks: 1
+  rna_dec_blocks: 0
   atac_dec_hidden: 512
-  atac_dec_blocks: 1
+  atac_dec_blocks: 0
   sfib_debug_mode: false
   model.sfib_debug_epochs: [1, 10, 20]
   model.sfib_debug_every_n_epochs: 20
@@ -90,7 +90,7 @@ train:
   lambda_rna: 5.0
   lambda_atac: 1.0
   lambda_clip: 0.5
-  lambda_smooth: 50.0
+  lambda_smooth: 15.0
   fade_start_epoch: 2000
   fade_end_epoch: 2500
   pos_weight_rna: 10.0

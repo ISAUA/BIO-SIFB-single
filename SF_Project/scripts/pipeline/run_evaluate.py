@@ -170,6 +170,17 @@ def calculate_spatial_morans_i(coords, features, k=6):
     return np.mean(morans_i_vals), morans_i_vals
 
 
+def should_invert_spatial_axis(adata, save_dir=None):
+    """Prefer source metadata to decide whether the spatial axis should be flipped."""
+    if 'slices_path' in adata.obs.columns:
+        slices_path = adata.obs['slices_path'].astype(str).str.lower()
+        if slices_path.str.contains('misar').any():
+            return True
+    if save_dir is not None and 'misar' in save_dir.lower():
+        return True
+    return False
+
+
 def calculate_clustering_scores(cluster_labels, ground_truth):
     if ground_truth is None:
         return None
@@ -239,7 +250,7 @@ def visualize_and_save(
     adata = sc.AnnData(X=z_final)
     coords_plot = coords.copy()
     # Y 轴镜像翻转，修正切片方向中的镜面对称问题
-    coords_plot[:, 1] = -1.0 * coords_plot[:, 1]
+    # coords_plot[:, 1] = -1.0 * coords_plot[:, 1]
     adata.obsm['spatial'] = coords_plot
     
     # 2. 基础分析流程 (Neighbors -> UMAP -> Clustering)
@@ -356,8 +367,10 @@ def visualize_and_save(
     # 极简坐标轴：保留框体，隐藏刻度线与刻度标签
     for ax in axs:
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
-    # 翻转 Y 轴以匹配常见的显微镜视角 (可选)
-    # axs[1].invert_yaxis() 
+    # ========== 修改：自动匹配显微镜视角 ==========
+    if should_invert_spatial_axis(adata, save_dir=save_dir):
+        axs[1].invert_yaxis()
+    # ==============================================
     
     # 在图外标注使用的 epoch 信息以及莫兰指数 (全英文)
     if epoch_label:

@@ -73,6 +73,90 @@ class SFTrainer:
         if self.fade_end_epoch < self.fade_start_epoch:
             self.fade_end_epoch = self.fade_start_epoch
 
+    def _set_backbone_frozen_for_translation(self):
+        """Freeze BioSFINet backbone and switch to eval mode for translator stage."""
+        self.model.eval()
+        for p in self.model.parameters():
+            p.requires_grad = False
+
+    def train_translator_epoch(
+        self,
+        translator,
+        translator_optimizer,
+        rna_feat,
+        atac_feat,
+        edge_index,
+        u_basis,
+        evals=None,
+        edge_weight=None,
+        lambda_cosine=1.0,
+        lambda_mse=1.0,
+        lambda_recon=1.0,
+    ):
+        """
+        Stage 2: train SF_Translator_R2A with frozen BioSFINet backbone.
+
+        Flow:
+          1) f_rna/f_atac_true from frozen encoders+projectors
+          2) f_atac_hat = translator(f_rna)
+          3) use (f_rna, f_atac_hat) to drive frozen sfib + atac decoder
+        """
+        self._set_backbone_frozen_for_translation()
+        translator.train()
+        for p in translator.parameters():
+            p.requires_grad = True
+
+        translator_optimizer.zero_grad()
+
+        rna_feat = rna_feat.to(self.device)
+        atac_feat = atac_feat.to(self.device)
+        edge_index = edge_index.to(self.device)
+        if edge_weight is not None:
+            edge_weight = edge_weight.to(self.device)
+        u_basis = u_basis.to(self.device)
+        if evals is not None:
+            evals = evals.to(self.device)
+
+        # Step 1: frozen reference latent features.
+        with torch.no_grad():
+            h_rna = self.model.rna_enc(rna_feat, edge_index)
+            h_atac = self.model.atac_enc(atac_feat)
+            f_rna = self.model.rna_proj(h_rna)
+            f_atac_true = self.model.atac_proj(h_atac)
+
+        # Step 2: translator generates pseudo ATAC latent.
+        f_atac_hat = translator(f_rna)
+
+        # Step 3: feed pseudo ATAC into frozen fusion + decoder.
+        z_fused_hat, *_ = self.model.sfib(
+            f_rna, f_atac_hat, edge_index, u_basis, evals, edge_weight=edge_weight
+        )
+        x_atac_pred = self.model.atac_dec(z_fused_hat)
+
+        cosine_criterion = nn.CosineEmbeddingLoss().to(self.device)
+        mse_criterion = nn.MSELoss().to(self.device)
+        y_pos = torch.ones(f_atac_hat.size(0), device=self.device)
+
+        loss_cosine = cosine_criterion(f_atac_hat, f_atac_true, y_pos)
+        loss_mse = mse_criterion(f_atac_hat, f_atac_true)
+        loss_recon = self.criterion_atac(x_atac_pred, atac_feat)
+
+        total_loss = (
+            float(lambda_cosine) * loss_cosine
+            + float(lambda_mse) * loss_mse
+            + float(lambda_recon) * loss_recon
+        )
+
+        total_loss.backward()
+        translator_optimizer.step()
+
+        return {
+            "total": total_loss.item(),
+            "cosine": loss_cosine.item(),
+            "mse": loss_mse.item(),
+            "recon": loss_recon.item(),
+        }
+
     def get_current_clip_weight(self, epoch):
         if epoch <= self.fade_start_epoch:
             return self.lambda_clip_init

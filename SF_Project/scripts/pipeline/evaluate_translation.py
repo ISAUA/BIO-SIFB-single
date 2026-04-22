@@ -1,11 +1,15 @@
 import argparse
+import logging
 import math
+import os
 from typing import Any, Callable, Dict, Optional
 
 import numpy as np
 import pandas as pd
 import scanpy as sc
+import torch
 from scipy.stats import pearsonr
+from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import (
     adjusted_mutual_info_score,
@@ -20,6 +24,33 @@ def _to_numpy(x):
     if hasattr(x, "detach"):
         x = x.detach().cpu().numpy()
     return np.asarray(x)
+
+
+def _resolve_train_log_path(save_dir: str) -> str:
+    save_dir = save_dir.rstrip("/\\")
+    if os.path.basename(save_dir) == "checkpoints":
+        return os.path.join(os.path.dirname(save_dir), "train.log")
+    return os.path.join(save_dir, "train.log")
+
+
+def _setup_logger(log_path: str):
+    logger = logging.getLogger("SFTranslationEvaluate")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+    logger.handlers.clear()
+
+    os.makedirs(os.path.dirname(log_path), exist_ok=True)
+    handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+def _append_log_separator(log_path: str):
+    with open(log_path, "a", encoding="utf-8") as f:
+        f.write("\n" + "=" * 88 + "\n")
 
 
 def _ensure_r_runtime_available():
@@ -66,6 +97,30 @@ def _try_load_repo_moran_impl():
         return None
 
 
+def _resolve_checkpoint_path(save_dir: str, ckpt_key: str, checkpoint_map: Optional[dict] = None):
+    checkpoint_map = checkpoint_map or {}
+    ckpt_name = checkpoint_map.get(ckpt_key, checkpoint_map.get(str(ckpt_key), ckpt_key))
+    ckpt_name = str(ckpt_name)
+
+    candidates = []
+    if os.path.isabs(ckpt_name):
+        candidates.append(ckpt_name)
+    else:
+        candidates.append(os.path.join(save_dir, ckpt_name))
+
+    if "/" not in ckpt_name and "\\" not in ckpt_name:
+        if ckpt_name.isdigit():
+            candidates.append(os.path.join(save_dir, f"ckpt_{ckpt_name}.pth"))
+        elif ckpt_name.startswith("ckpt_") and not ckpt_name.endswith(".pth"):
+            candidates.append(os.path.join(save_dir, f"{ckpt_name}.pth"))
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate, os.path.basename(candidate)
+
+    return candidates[0], ckpt_name
+
+
 def _fallback_moran_impl(coords, features, k=6):
     """
     Fallback Moran implementation.
@@ -105,6 +160,73 @@ def _fallback_moran_impl(coords, features, k=6):
     return float(np.mean(morans_i_vals)), morans_i_vals
 
 
+def _load_processed_translation_inputs(
+    config_path: str,
+    backbone_checkpoint: Optional[str] = None,
+    translator_checkpoint: Optional[str] = None,
+):
+    import yaml
+    from sf_model.model.bio_sfinet import BioSFINet, SF_Translator_R2A
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    data_path = os.path.join(config["data"]["processed_path"], "processed_data.pt")
+    data_dict = torch.load(data_path, map_location="cpu")
+
+    rna_feat = data_dict["rna_feat"]
+    atac_feat = data_dict["atac_feat"]
+    coords = data_dict["coords"]
+    edge_index = data_dict["edge_index"]
+    edge_weight = data_dict.get("edge_weight", None)
+    u_basis = data_dict["u_basis"]
+    evals = data_dict.get("evals", None)
+    true_labels = data_dict.get("ground_truth", None)
+
+    rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
+    atac_dim = int(data_dict["atac_dim"])
+    config["model"]["rna_in_dim"] = rna_dim
+
+    save_dir = config["project"]["save_dir"]
+    eval_cfg = config.get("eval", {})
+    ckpt_map = eval_cfg.get("checkpoints", {})
+    backbone_key = backbone_checkpoint or eval_cfg.get("checkpoint", "best")
+    backbone_path, backbone_name = _resolve_checkpoint_path(save_dir, backbone_key, ckpt_map)
+    if not os.path.exists(backbone_path):
+        raise FileNotFoundError(f"Backbone checkpoint not found: {backbone_path}")
+
+    translator_dir = os.path.join(save_dir, "translator_checkpoints")
+    translator_path = translator_checkpoint or os.path.join(translator_dir, "translator_r2a_best.pth")
+    if not os.path.exists(translator_path):
+        raise FileNotFoundError(f"Translator checkpoint not found: {translator_path}")
+
+    model = BioSFINet(config, atac_dim=atac_dim)
+    model.load_state_dict(torch.load(backbone_path, map_location="cpu"), strict=False)
+    model.eval()
+    for p in model.parameters():
+        p.requires_grad = False
+
+    translator = SF_Translator_R2A(hidden_dim=int(config["model"].get("sfib_dim", 128)), n_blocks=3)
+    translator.load_state_dict(torch.load(translator_path, map_location="cpu"))
+    translator.eval()
+
+    with torch.no_grad():
+        h_rna = model.rna_enc(rna_feat, edge_index)
+        f_rna = model.rna_proj(h_rna)
+        f_atac_hat = translator(f_rna)
+        z_fused_hat, *_ = model.sfib(f_rna, f_atac_hat, edge_index, u_basis, evals, edge_weight=edge_weight)
+        pred_atac = model.atac_dec(z_fused_hat)
+
+    return {
+        "pred_atac": pred_atac,
+        "true_atac": atac_feat,
+        "true_labels": true_labels,
+        "coords": coords,
+        "backbone_name": backbone_name,
+        "translator_name": os.path.basename(translator_path),
+    }
+
+
 def _safe_spotwise_pcc(pred: np.ndarray, true: np.ndarray) -> float:
     """Compute row-wise Pearson correlation and return mean over valid rows."""
     pcc_vals = []
@@ -130,10 +252,11 @@ def _cluster_with_mclust_or_scanpy(
     """
     Default clustering pipeline:
     1) try mclust on PCA features;
-    2) fallback to scanpy leiden when R/mclust is unavailable.
+    2) fallback to scanpy leiden when R/mclust is unavailable;
+    3) fallback to KMeans when leiden dependencies are unavailable.
     """
     try:
-        ensure_r_runtime_available()
+        _ensure_r_runtime_available()
         import rpy2.robjects as robjects
         import rpy2.robjects.numpy2ri
 
@@ -153,23 +276,30 @@ def _cluster_with_mclust_or_scanpy(
     except Exception as e:
         print(f"[evaluate_translation] mclust unavailable, fallback to scanpy leiden: {e}")
 
-    adata = sc.AnnData(X=features_pca)
-    sc.pp.neighbors(adata, use_rep="X", random_state=int(random_state))
+    try:
+        adata = sc.AnnData(X=features_pca)
+        sc.pp.neighbors(adata, use_rep="X", random_state=int(random_state))
 
-    # Sweep resolution to approximate target number of clusters.
-    best_labels = None
-    best_gap = 10**9
-    for res in np.linspace(0.2, 3.0, 15):
-        sc.tl.leiden(adata, resolution=float(res), key_added="leiden_tmp", random_state=int(random_state))
-        labels = adata.obs["leiden_tmp"].astype(int).to_numpy()
-        gap = abs(np.unique(labels).shape[0] - int(n_clusters))
-        if gap < best_gap:
-            best_gap = gap
-            best_labels = labels
-        if gap == 0:
-            break
+        # Sweep resolution to approximate target number of clusters.
+        best_labels = None
+        best_gap = 10**9
+        for res in np.linspace(0.2, 3.0, 15):
+            sc.tl.leiden(adata, resolution=float(res), key_added="leiden_tmp", random_state=int(random_state))
+            labels = adata.obs["leiden_tmp"].astype(int).to_numpy()
+            gap = abs(np.unique(labels).shape[0] - int(n_clusters))
+            if gap < best_gap:
+                best_gap = gap
+                best_labels = labels
+            if gap == 0:
+                break
 
-    return np.asarray(best_labels).astype(int)
+        if best_labels is not None:
+            return np.asarray(best_labels).astype(int)
+    except Exception as e:
+        print(f"[evaluate_translation] leiden unavailable, fallback to KMeans: {e}")
+
+    km = KMeans(n_clusters=int(n_clusters), random_state=int(random_state), n_init=10)
+    return km.fit_predict(features_pca).astype(int)
 
 
 def evaluate_translation(
@@ -282,10 +412,21 @@ def evaluate_translation(
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Evaluate cross-modal translation metrics")
-    parser.add_argument("--pred", required=True, help="Path to predicted ATAC matrix .npy")
-    parser.add_argument("--true", required=True, help="Path to ground-truth ATAC matrix .npy")
-    parser.add_argument("--labels", required=True, help="Path to true spatial labels .npy")
-    parser.add_argument("--coords", required=True, help="Path to spatial coordinates .npy")
+    parser.add_argument("--config", default=None, help="Optional config path for end-to-end translation evaluation")
+    parser.add_argument(
+        "--backbone-checkpoint",
+        default=None,
+        help="Backbone checkpoint key or filename when using --config; defaults to config eval.checkpoint",
+    )
+    parser.add_argument(
+        "--translator-checkpoint",
+        default=None,
+        help="Optional translator checkpoint path; defaults to translator_checkpoints/translator_r2a_best.pth",
+    )
+    parser.add_argument("--pred", default=None, help="Path to predicted ATAC matrix .npy")
+    parser.add_argument("--true", default=None, help="Path to ground-truth ATAC matrix .npy")
+    parser.add_argument("--labels", default=None, help="Path to true spatial labels .npy")
+    parser.add_argument("--coords", default=None, help="Path to spatial coordinates .npy")
     parser.add_argument("--n-clusters", type=int, default=7, help="Target number of clusters")
     parser.add_argument("--pca-dim", type=int, default=20, help="PCA dimension before clustering/Moran")
     parser.add_argument("--moran-k", type=int, default=6, help="KNN neighbors for Moran's I")
@@ -294,10 +435,40 @@ def parse_args():
 
 def main():
     args = parse_args()
-    pred = np.load(args.pred)
-    true = np.load(args.true)
-    labels = np.load(args.labels)
-    coords = np.load(args.coords)
+    logger = None
+    log_path = None
+
+    if args.config is not None:
+        import yaml
+
+        with open(args.config, "r", encoding="utf-8") as f:
+            cfg_for_log = yaml.safe_load(f)
+        save_dir = cfg_for_log["project"]["save_dir"]
+        log_path = _resolve_train_log_path(save_dir)
+        logger = _setup_logger(log_path)
+        logger.info("[Stage 3.5] Translation evaluation started.")
+
+        bundle = _load_processed_translation_inputs(
+            config_path=args.config,
+            backbone_checkpoint=args.backbone_checkpoint,
+            translator_checkpoint=args.translator_checkpoint,
+        )
+        pred = _to_numpy(bundle["pred_atac"])
+        true = _to_numpy(bundle["true_atac"])
+        labels = bundle["true_labels"]
+        coords = _to_numpy(bundle["coords"])
+        logger.info(
+            "Using checkpoints | backbone=%s | translator=%s",
+            bundle.get("backbone_name", "unknown"),
+            bundle.get("translator_name", "unknown"),
+        )
+    else:
+        if not all([args.pred, args.true, args.labels, args.coords]):
+            raise SystemExit("Either --config or all of --pred/--true/--labels/--coords must be provided.")
+        pred = np.load(args.pred)
+        true = np.load(args.true)
+        labels = np.load(args.labels, allow_pickle=True)
+        coords = np.load(args.coords)
 
     results = evaluate_translation(
         pred_atac_matrix=pred,
@@ -310,6 +481,21 @@ def main():
     )
     print("Translation Evaluation - Summary:")
     print(results)
+
+    if logger is not None:
+        logger.info(
+            "Translation metrics | RMSE=%.4f | SpotPCC=%.4f | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | Moran=%.4f",
+            float(results["reconstruction"]["rmse"]),
+            float(results["reconstruction"]["spotwise_pcc"]),
+            float(results["clustering"]["ari"]),
+            float(results["clustering"]["nmi"]),
+            float(results["clustering"]["ami"]),
+            float(results["clustering"]["hom"]),
+            float(results["spatial_autocorrelation"]["moran_i_avg"]),
+        )
+        logger.info("Translation evaluation complete.")
+        if os.environ.get("SF_PIPELINE_RUN") != "1" and log_path is not None:
+            _append_log_separator(log_path)
 
 
 if __name__ == "__main__":

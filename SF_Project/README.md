@@ -82,6 +82,8 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ck
 
 ### 跨模态翻译训练（Stage 2: RNA -> ATAC）
 
+先确保已进入环境：`conda activate sc_bridge`
+
 使用已训练好的主干 checkpoint，训练 `SF_Translator_R2A`：
 
 ```bash
@@ -103,6 +105,22 @@ python run_train_translator.py \
 ```
 
 输出默认保存在 `save_dir/translator_checkpoints/`，包含 best 与 last 权重文件。
+
+### 跨模态翻译评估（Translation Evaluation）
+
+使用新增脚本直接评估翻译结果（RMSE / Spot-wise PCC / ARI / NMI / AMI / HOM / Moran's I）。先激活环境：`conda activate sc_bridge`
+
+```bash
+python evaluate_translation.py \
+	--config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+	--backbone-checkpoint ckpt_2100.pth \
+	--translator-checkpoint results/misar/misar_e18-5-s1/checkpoints/translator_checkpoints/translator_r2a_best.pth \
+	--n-clusters 14 \
+	--pca-dim 20 \
+	--moran-k 6
+```
+
+如果你已经单独导出了 `pred_atac.npy / true_atac.npy / labels.npy / coords.npy`，脚本也支持原来的文件输入模式；但上面这条是推荐的直接可用命令。
 
 可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
 

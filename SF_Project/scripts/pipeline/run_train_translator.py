@@ -57,6 +57,12 @@ def setup_logger(log_path):
     formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
     handler.setFormatter(formatter)
     logger.addHandler(handler)
+
+    # 同步输出到终端，避免看起来像“没有运行”。
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(stream_handler)
     return logger
 
 
@@ -76,14 +82,27 @@ def resolve_checkpoint_path(args_ckpt, config, save_dir):
     eval_cfg = config.get("eval", {})
     ckpt_key = args_ckpt or eval_cfg.get("checkpoint", "best")
     ckpt_map = eval_cfg.get("checkpoints", {})
-    ckpt_name = ckpt_map.get(ckpt_key, ckpt_key)
+    ckpt_name = ckpt_map.get(ckpt_key, ckpt_map.get(str(ckpt_key), ckpt_key))
+    ckpt_name = str(ckpt_name)
 
+    candidates = []
     if os.path.isabs(ckpt_name):
-        ckpt_path = ckpt_name
+        candidates.append(ckpt_name)
     else:
-        ckpt_path = os.path.join(save_dir, ckpt_name)
+        candidates.append(os.path.join(save_dir, ckpt_name))
 
-    return ckpt_path, ckpt_name
+    # 兼容 checkpoint 为纯轮次 key（如 "2100"）或不带后缀写法。
+    if "/" not in ckpt_name and "\\" not in ckpt_name:
+        if ckpt_name.isdigit():
+            candidates.append(os.path.join(save_dir, f"ckpt_{ckpt_name}.pth"))
+        elif ckpt_name.startswith("ckpt_") and not ckpt_name.endswith(".pth"):
+            candidates.append(os.path.join(save_dir, f"{ckpt_name}.pth"))
+
+    for candidate in candidates:
+        if os.path.exists(candidate):
+            return candidate, os.path.basename(candidate)
+
+    return candidates[0], ckpt_name
 
 
 def main():
@@ -130,7 +149,7 @@ def main():
     if not os.path.exists(data_path):
         logger.error("Data file not found at %s", data_path)
         logger.error("Please run preprocess first.")
-        return
+        raise SystemExit(1)
 
     logger.info("Loading processed data from %s", data_path)
     data_dict = torch_load_compat(data_path, map_location="cpu", weights_only=False)
@@ -152,8 +171,8 @@ def main():
     ckpt_path, ckpt_name = resolve_checkpoint_path(args.backbone_checkpoint, config, save_dir)
     if not os.path.exists(ckpt_path):
         logger.error("Backbone checkpoint not found at %s", ckpt_path)
-        logger.error("Please train backbone first or pass --backbone-checkpoint.")
-        return
+        logger.error("Please train backbone first or pass --backbone-checkpoint (e.g. ckpt_2100.pth).")
+        raise SystemExit(1)
 
     logger.info("Loading frozen backbone checkpoint: %s", ckpt_name)
     state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)

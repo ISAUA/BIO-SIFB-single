@@ -87,6 +87,10 @@ data:                                 # 数据配置
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
   rna_in_dim: 3000                    # RNA 输入维度
+  n_freq_components: 3000             
+  ino_use_edge_weight: true           
+  ino_pre_smooth_enable: true         
+  ino_pre_smooth_alpha: 0.8
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
   rna_dropout: 0.1                    # RNA 分支 dropout

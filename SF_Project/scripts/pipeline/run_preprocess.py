@@ -1,4 +1,19 @@
 import os
+
+
+def _sanitize_thread_env():
+    for key in ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS", "NUMEXPR_NUM_THREADS"):
+        val = os.environ.get(key)
+        if val is None:
+            os.environ[key] = "1"
+            continue
+        val = val.strip()
+        if not val.isdigit() or int(val) <= 0:
+            os.environ[key] = "1"
+
+
+_sanitize_thread_env()
+
 import argparse
 import logging
 import time

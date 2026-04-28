@@ -300,8 +300,9 @@ def visualize_and_save(
         
         # 评估视角 2：离散聚类标签的空间连贯性
         cluster_labels = adata.obs['cluster'].values.astype(int)
-        num_clusters = np.max(cluster_labels) + 1
-        one_hot_clusters = np.eye(num_clusters)[cluster_labels]
+        # mclust labels are often 1-based; use categorical codes to avoid adding an extra all-zero column.
+        num_clusters = int(np.unique(cluster_labels).shape[0])
+        one_hot_clusters = np.eye(num_clusters)[pd.Categorical(cluster_labels).codes]
         mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
         
         moran_title_str = f" | Latent Moran's I: {mi_latent_avg:.4f} | Cluster Moran's I: {mi_cluster_avg:.4f}"

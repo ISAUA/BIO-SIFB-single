@@ -1,6 +1,5 @@
 import argparse
 import logging
-import math
 import os
 from typing import Any, Callable, Dict, Optional
 
@@ -8,15 +7,24 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import torch
-from scipy.stats import pearsonr
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from sklearn.metrics import (
     adjusted_mutual_info_score,
     adjusted_rand_score,
     homogeneity_score,
-    mean_squared_error,
     normalized_mutual_info_score,
+)
+
+from .translation_runtime import (
+    append_log_separator,
+    load_config,
+    load_processed_data,
+    resolve_backbone_checkpoint,
+    resolve_train_log_path,
+    resolve_translator_checkpoint,
+    setup_file_logger,
+    torch_load_compat,
 )
 
 
@@ -24,33 +32,6 @@ def _to_numpy(x):
     if hasattr(x, "detach"):
         x = x.detach().cpu().numpy()
     return np.asarray(x)
-
-
-def _resolve_train_log_path(save_dir: str) -> str:
-    save_dir = save_dir.rstrip("/\\")
-    if os.path.basename(save_dir) == "checkpoints":
-        return os.path.join(os.path.dirname(save_dir), "train.log")
-    return os.path.join(save_dir, "train.log")
-
-
-def _setup_logger(log_path: str):
-    logger = logging.getLogger("SFTranslationEvaluate")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    logger.handlers.clear()
-
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-    return logger
-
-
-def _append_log_separator(log_path: str):
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write("\n" + "=" * 88 + "\n")
 
 
 def _ensure_r_runtime_available():
@@ -97,30 +78,6 @@ def _try_load_repo_moran_impl():
         return None
 
 
-def _resolve_checkpoint_path(save_dir: str, ckpt_key: str, checkpoint_map: Optional[dict] = None):
-    checkpoint_map = checkpoint_map or {}
-    ckpt_name = checkpoint_map.get(ckpt_key, checkpoint_map.get(str(ckpt_key), ckpt_key))
-    ckpt_name = str(ckpt_name)
-
-    candidates = []
-    if os.path.isabs(ckpt_name):
-        candidates.append(ckpt_name)
-    else:
-        candidates.append(os.path.join(save_dir, ckpt_name))
-
-    if "/" not in ckpt_name and "\\" not in ckpt_name:
-        if ckpt_name.isdigit():
-            candidates.append(os.path.join(save_dir, f"ckpt_{ckpt_name}.pth"))
-        elif ckpt_name.startswith("ckpt_") and not ckpt_name.endswith(".pth"):
-            candidates.append(os.path.join(save_dir, f"{ckpt_name}.pth"))
-
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate, os.path.basename(candidate)
-
-    return candidates[0], ckpt_name
-
-
 def _fallback_moran_impl(coords, features, k=6):
     """
     Fallback Moran implementation.
@@ -163,84 +120,91 @@ def _fallback_moran_impl(coords, features, k=6):
 def _load_processed_translation_inputs(
     config_path: str,
     backbone_checkpoint: Optional[str] = None,
+    backbone_config: Optional[str] = None,
     translator_checkpoint: Optional[str] = None,
+    device: str = "cpu",
 ):
-    import yaml
     from sf_model.model.bio_sfinet import BioSFINet, SF_Translator_R2A
 
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = yaml.safe_load(f)
+    # 1. 严格使用当前 config (如 S2) 加载测试数据
+    config = load_config(config_path)
+    data_dict = load_processed_data(config)
 
-    data_path = os.path.join(config["data"]["processed_path"], "processed_data.pt")
-    data_dict = torch.load(data_path, map_location="cpu")
-
-    rna_feat = data_dict["rna_feat"]
-    atac_feat = data_dict["atac_feat"]
-    coords = data_dict["coords"]
-    edge_index = data_dict["edge_index"]
+    rna_feat = data_dict["rna_feat"].to(device)   # S2 true RNA
+    atac_feat = data_dict["atac_feat"].to(device) # S2 true ATAC
+    coords = data_dict["coords"]                 # S2 coordinates (metric reference)
+    edge_index = data_dict["edge_index"].to(device) # S2 graph topology
     edge_weight = data_dict.get("edge_weight", None)
-    u_basis = data_dict["u_basis"]
+    if edge_weight is not None:
+        edge_weight = edge_weight.to(device)
+    u_basis = data_dict["u_basis"].to(device)
     evals = data_dict.get("evals", None)
-    true_labels = data_dict.get("ground_truth", None)
+    if evals is not None:
+        evals = evals.to(device)
+    true_labels = data_dict.get("ground_truth", None) # S2 ground-truth labels
 
+    # ==========================================
+    # [核心修复]: 必须用预处理降维后的实际维度覆盖 YAML 配置的原始维度
+    # ==========================================
     rna_dim = int(data_dict.get("rna_dim", rna_feat.shape[1]))
     atac_dim = int(data_dict["atac_dim"])
     config["model"]["rna_in_dim"] = rna_dim
+    # ==========================================
 
-    save_dir = config["project"]["save_dir"]
-    eval_cfg = config.get("eval", {})
-    ckpt_map = eval_cfg.get("checkpoints", {})
-    backbone_key = backbone_checkpoint or eval_cfg.get("checkpoint", "best")
-    backbone_path, backbone_name = _resolve_checkpoint_path(save_dir, backbone_key, ckpt_map)
+    # 2. 初始化并加载冻结的 S1 权重
+    backbone_path, backbone_name, backbone_source = resolve_backbone_checkpoint(
+        target_config=config,
+        backbone_checkpoint=backbone_checkpoint,
+        backbone_config_path=backbone_config,
+    )
+    translator_path, translator_name = resolve_translator_checkpoint(config, translator_checkpoint)
     if not os.path.exists(backbone_path):
         raise FileNotFoundError(f"Backbone checkpoint not found: {backbone_path}")
-
-    translator_dir = os.path.join(save_dir, "translator_checkpoints")
-    translator_path = translator_checkpoint or os.path.join(translator_dir, "translator_r2a_best.pth")
     if not os.path.exists(translator_path):
         raise FileNotFoundError(f"Translator checkpoint not found: {translator_path}")
 
-    model = BioSFINet(config, atac_dim=atac_dim)
-    model.load_state_dict(torch.load(backbone_path, map_location="cpu"), strict=False)
+    # 此时模型初始化就会正确使用 rna_in_dim = 512
+    model = BioSFINet(config, atac_dim=atac_dim).to(device)
+    model.load_state_dict(torch_load_compat(backbone_path, map_location=device, weights_only=True), strict=False)
     model.eval()
     for p in model.parameters():
         p.requires_grad = False
 
-    translator = SF_Translator_R2A(hidden_dim=int(config["model"].get("sfib_dim", 128)), n_blocks=3)
-    translator.load_state_dict(torch.load(translator_path, map_location="cpu"))
+    translation_cfg = config.get("translation", {})
+    stage2_cfg = translation_cfg.get("stage2", {})
+    stage2_model_cfg = stage2_cfg.get("model", {})
+    translator_cfg = config.get("translator", {})
+    translator_blocks = int(stage2_model_cfg.get("n_blocks", translator_cfg.get("n_blocks", 3)))
+    translator = SF_Translator_R2A(hidden_dim=int(config["model"].get("sfib_dim", 128)), n_blocks=translator_blocks).to(device)
+    translator.load_state_dict(torch_load_compat(translator_path, map_location=device, weights_only=True))
     translator.eval()
 
+    # 3. 前向传播提取三组对照潜变量
     with torch.no_grad():
+        # Lower Bound: S2 单模态基线 (f_rna)
         h_rna = model.rna_enc(rna_feat, edge_index)
         f_rna = model.rna_proj(h_rna)
+        
+        # Translated Result: S2 翻译补偿融合 (z_fused_hat)
         f_atac_hat = translator(f_rna)
         z_fused_hat, *_ = model.sfib(f_rna, f_atac_hat, edge_index, u_basis, evals, edge_weight=edge_weight)
-        pred_atac = model.atac_dec(z_fused_hat)
+        
+        # Upper Bound: S2 真实双模态黄金标准 (z_fused_true)
+        h_atac_true = model.atac_enc(atac_feat)
+        f_atac_true = model.atac_proj(h_atac_true)
+        z_fused_true, *_ = model.sfib(f_rna, f_atac_true, edge_index, u_basis, evals, edge_weight=edge_weight)
 
     return {
-        "pred_atac": pred_atac,
-        "true_atac": atac_feat,
+        "f_rna": f_rna,               # Lower Bound
+        "f_atac_hat": f_atac_hat,     # Translated ATAC only
+        "z_fused_hat": z_fused_hat,   # Translated Result
+        "z_fused_true": z_fused_true, # Upper Bound
         "true_labels": true_labels,
         "coords": coords,
         "backbone_name": backbone_name,
-        "translator_name": os.path.basename(translator_path),
+        "backbone_source": backbone_source,
+        "translator_name": translator_name,
     }
-
-
-def _safe_spotwise_pcc(pred: np.ndarray, true: np.ndarray) -> float:
-    """Compute row-wise Pearson correlation and return mean over valid rows."""
-    pcc_vals = []
-    for i in range(pred.shape[0]):
-        row_pred = pred[i]
-        row_true = true[i]
-        # pearsonr returns nan when one row is constant; skip invalid rows.
-        corr, _ = pearsonr(row_pred, row_true)
-        if np.isfinite(corr):
-            pcc_vals.append(float(corr))
-
-    if len(pcc_vals) == 0:
-        return float("nan")
-    return float(np.mean(pcc_vals))
 
 
 def _cluster_with_mclust_or_scanpy(
@@ -303,8 +267,7 @@ def _cluster_with_mclust_or_scanpy(
 
 
 def evaluate_translation(
-    pred_atac_matrix,
-    true_atac_matrix,
+    latent_matrix,
     true_spatial_labels,
     spatial_coords,
     n_clusters: int = 7,
@@ -315,99 +278,45 @@ def evaluate_translation(
     moran_fn: Optional[Callable[..., Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Evaluate RNA->ATAC translation with reconstruction, clustering and spatial autocorrelation metrics.
-
-    Required inputs:
-      pred_atac_matrix: [N_spots, N_peaks]
-      true_atac_matrix: [N_spots, N_peaks]
-      true_spatial_labels: [N_spots]
-      spatial_coords: [N_spots, 2]
-
-    Optional interfaces:
-      cluster_fn(features_pca, n_clusters, random_state) -> cluster labels
-      moran_fn(coords, features, k) -> (avg_moran, per_feature_moran)
+    直接评估潜变量矩阵的聚类与空间特征。
     """
-    pred = _to_numpy(pred_atac_matrix).astype(np.float32)
-    true = _to_numpy(true_atac_matrix).astype(np.float32)
+    latent = _to_numpy(latent_matrix).astype(np.float32)
     labels_true = _to_numpy(true_spatial_labels)
     coords = _to_numpy(spatial_coords).astype(np.float32)
 
-    if pred.shape != true.shape:
-        raise ValueError(f"Shape mismatch: pred={pred.shape}, true={true.shape}")
-    if pred.shape[0] != labels_true.shape[0]:
-        raise ValueError(
-            f"Spot mismatch: pred rows={pred.shape[0]}, true_spatial_labels={labels_true.shape[0]}"
-        )
-    if coords.shape[0] != pred.shape[0] or coords.shape[1] != 2:
-        raise ValueError(f"spatial_coords must be [N_spots, 2], got {coords.shape}")
-
-    # 1) Reconstruction metrics
-    mse = mean_squared_error(true.reshape(-1), pred.reshape(-1))
-    rmse = float(math.sqrt(float(mse)))
-    spotwise_pcc = _safe_spotwise_pcc(pred, true)
-
-    print(f"Translation Evaluation - RMSE: {rmse:.4f}, Spot-wise PCC: {spotwise_pcc:.4f}")
-
-    # 2) Clustering metrics (PCA + clustering interface)
+    # 1) 聚类评估 (默认使用 mclust)
+    # 潜变量维度通常为 128，此处 PCA 旨在统一聚类前的特征空间
     pca_target_dim = max(1, int(pca_dim))
-    pca_n_components = min(pca_target_dim, pred.shape[1], pred.shape[0])
+    pca_n_components = min(pca_target_dim, latent.shape[1], latent.shape[0])
     pca_model = PCA(n_components=pca_n_components, random_state=int(random_state))
-    pred_pca = pca_model.fit_transform(pred)
+    latent_pca = pca_model.fit_transform(latent)
 
     if cluster_fn is None:
         pred_cluster_labels = _cluster_with_mclust_or_scanpy(
-            pred_pca,
-            n_clusters=int(n_clusters),
-            random_state=int(random_state),
-            mclust_model_name="EEE",
+            latent_pca, n_clusters=int(n_clusters), random_state=int(random_state)
         )
     else:
-        # Interface placeholder: use caller-provided mclust/scanpy pipeline.
-        pred_cluster_labels = np.asarray(
-            cluster_fn(pred_pca, n_clusters=int(n_clusters), random_state=int(random_state))
-        )
+        pred_cluster_labels = np.asarray(cluster_fn(latent_pca, n_clusters=int(n_clusters)))
 
-    labels_true_series = pd.Series(labels_true).astype(str)
-    labels_pred_series = pd.Series(pred_cluster_labels).astype(str)
+    # 计算聚类指标
+    ari = float(adjusted_rand_score(labels_true, pred_cluster_labels))
+    nmi = float(normalized_mutual_info_score(labels_true, pred_cluster_labels))
+    ami = float(adjusted_mutual_info_score(labels_true, pred_cluster_labels))
+    hom = float(homogeneity_score(labels_true, pred_cluster_labels))
 
-    ari = float(adjusted_rand_score(labels_true_series, labels_pred_series))
-    nmi = float(normalized_mutual_info_score(labels_true_series, labels_pred_series))
-    ami = float(adjusted_mutual_info_score(labels_true_series, labels_pred_series))
-    hom = float(homogeneity_score(labels_true_series, labels_pred_series))
+    # 2) 空间连贯性评估 (Cluster Moran's I)
+    moran_impl = moran_fn or _try_load_repo_moran_impl() or _fallback_moran_impl
+    
+    # 将离散标签转为 one-hot 以计算 Cluster Moran's I
+    num_unique = int(np.unique(pred_cluster_labels).shape[0])
+    one_hot_clusters = np.eye(num_unique)[pd.Categorical(pred_cluster_labels).codes]
+    mi_cluster_avg, _ = moran_impl(coords, one_hot_clusters, k=int(moran_k))
 
-    print(
-        "Translation Evaluation - Clustering: "
-        f"ARI={ari:.4f}, NMI={nmi:.4f}, AMI={ami:.4f}, HOM={hom:.4f}"
-    )
-
-    # 3) Spatial autocorrelation (Moran's I interface)
-    moran_impl = moran_fn
-    if moran_impl is None:
-        moran_impl = _try_load_repo_moran_impl() or _fallback_moran_impl
-    mi_pred_avg, mi_pred_per_feature = moran_impl(coords, pred_pca, k=int(moran_k))
-
-    print(f"Translation Evaluation - Moran's I: {float(mi_pred_avg):.4f}")
-
-    result = {
-        "reconstruction": {
-            "rmse": rmse,
-            "spotwise_pcc": float(spotwise_pcc),
-        },
-        "clustering": {
-            "ari": ari,
-            "nmi": nmi,
-            "ami": ami,
-            "hom": hom,
-            "n_clusters": int(np.unique(pred_cluster_labels).shape[0]),
-        },
-        "spatial_autocorrelation": {
-            "moran_i_avg": float(mi_pred_avg),
-            "moran_i_per_feature": _to_numpy(mi_pred_per_feature).tolist(),
-            "moran_features": "PCA features from predicted ATAC",
-        },
+    return {
+        "ari": ari, "nmi": nmi, "ami": ami, "hom": hom,
+        "moran": float(mi_cluster_avg),
+        "n_clusters": num_unique
     }
-
-    return result
 
 
 def parse_args():
@@ -419,6 +328,11 @@ def parse_args():
         help="Backbone checkpoint key or filename when using --config; defaults to config eval.checkpoint",
     )
     parser.add_argument(
+        "--backbone-config",
+        default=None,
+        help="Optional source config path for frozen backbone (e.g., S1 config while evaluating S2).",
+    )
+    parser.add_argument(
         "--translator-checkpoint",
         default=None,
         help="Optional translator checkpoint path; defaults to translator_checkpoints/translator_r2a_best.pth",
@@ -427,9 +341,9 @@ def parse_args():
     parser.add_argument("--true", default=None, help="Path to ground-truth ATAC matrix .npy")
     parser.add_argument("--labels", default=None, help="Path to true spatial labels .npy")
     parser.add_argument("--coords", default=None, help="Path to spatial coordinates .npy")
-    parser.add_argument("--n-clusters", type=int, default=7, help="Target number of clusters")
-    parser.add_argument("--pca-dim", type=int, default=20, help="PCA dimension before clustering/Moran")
-    parser.add_argument("--moran-k", type=int, default=6, help="KNN neighbors for Moran's I")
+    parser.add_argument("--n-clusters", type=int, default=None, help="Target number of clusters")
+    parser.add_argument("--pca-dim", type=int, default=None, help="PCA dimension before clustering/Moran")
+    parser.add_argument("--moran-k", type=int, default=None, help="KNN neighbors for Moran's I")
     return parser.parse_args()
 
 
@@ -443,60 +357,134 @@ def main():
 
         with open(args.config, "r", encoding="utf-8") as f:
             cfg_for_log = yaml.safe_load(f)
+        translation_cfg = cfg_for_log.get("translation", {})
+        stage35_cfg = translation_cfg.get("stage35", {})
+        stage35_backbone_cfg = stage35_cfg.get("backbone", {})
+        stage35_metrics_cfg = stage35_cfg.get("metrics", {})
+        stage35_io_cfg = stage35_cfg.get("io", {})
+
+        effective_backbone_checkpoint = (
+            args.backbone_checkpoint
+            if args.backbone_checkpoint is not None
+            else stage35_backbone_cfg.get("checkpoint", None)
+        )
+        effective_backbone_config = (
+            args.backbone_config
+            if args.backbone_config is not None
+            else stage35_backbone_cfg.get("config", None)
+        )
+        effective_translator_checkpoint = (
+            args.translator_checkpoint
+            if args.translator_checkpoint is not None
+            else stage35_io_cfg.get("translator_checkpoint", None)
+        )
+
         save_dir = cfg_for_log["project"]["save_dir"]
-        log_path = _resolve_train_log_path(save_dir)
-        logger = _setup_logger(log_path)
-        logger.info("[Stage 3.5] Translation evaluation started.")
+        log_path = resolve_train_log_path(save_dir)
+        logger = setup_file_logger("SFTranslationEvaluate", log_path, with_stream=False)
+        logger.info("[Stage 3.5] Latent Translation Evaluation started.")
+
+        device = "cuda" if torch.cuda.is_available() else "cpu"
 
         bundle = _load_processed_translation_inputs(
             config_path=args.config,
-            backbone_checkpoint=args.backbone_checkpoint,
-            translator_checkpoint=args.translator_checkpoint,
+            backbone_checkpoint=effective_backbone_checkpoint,
+            backbone_config=effective_backbone_config,
+            translator_checkpoint=effective_translator_checkpoint,
+            device=device,
         )
-        pred = _to_numpy(bundle["pred_atac"])
-        true = _to_numpy(bundle["true_atac"])
+        z_fused_hat = _to_numpy(bundle["z_fused_hat"])
+        z_fused_true = _to_numpy(bundle["z_fused_true"])
+        f_rna = _to_numpy(bundle["f_rna"])
+        f_atac_hat = _to_numpy(bundle["f_atac_hat"])
         labels = bundle["true_labels"]
         coords = _to_numpy(bundle["coords"])
+
+        if labels is None:
+            raise SystemExit("ground_truth is missing in processed_data.pt; Stage 3.5 metrics require S2 labels.")
+        
         logger.info(
-            "Using checkpoints | backbone=%s | translator=%s",
+            "Using checkpoints | backbone=%s (source=%s) | translator=%s | device=%s",
             bundle.get("backbone_name", "unknown"),
+            bundle.get("backbone_source", "unknown"),
             bundle.get("translator_name", "unknown"),
+            device,
         )
     else:
-        if not all([args.pred, args.true, args.labels, args.coords]):
-            raise SystemExit("Either --config or all of --pred/--true/--labels/--coords must be provided.")
-        pred = np.load(args.pred)
-        true = np.load(args.true)
-        labels = np.load(args.labels, allow_pickle=True)
-        coords = np.load(args.coords)
+        raise SystemExit("For latent evaluation, --config must be provided.")
 
-    results = evaluate_translation(
-        pred_atac_matrix=pred,
-        true_atac_matrix=true,
-        true_spatial_labels=labels,
-        spatial_coords=coords,
-        n_clusters=int(args.n_clusters),
-        pca_dim=int(args.pca_dim),
-        moran_k=int(args.moran_k),
+    eval_params = {
+        "true_spatial_labels": labels,
+        "spatial_coords": coords,
+        "n_clusters": int(args.n_clusters if args.n_clusters is not None else stage35_metrics_cfg.get("n_clusters", cfg_for_log.get("eval", {}).get("n_clusters", 7))),
+        "pca_dim": int(args.pca_dim if args.pca_dim is not None else stage35_metrics_cfg.get("pca_dim", cfg_for_log.get("eval", {}).get("mclust_pca_dim", 20))),
+        "moran_k": int(args.moran_k if args.moran_k is not None else stage35_metrics_cfg.get("moran_k", cfg_for_log.get("eval", {}).get("moran_k", 6))),
+    }
+
+    print("\n--- Latent Evaluation: Upper Bound (True Dual-Modal Fusion) ---")
+    res_upper = evaluate_translation(latent_matrix=z_fused_true, **eval_params)
+    
+    print("\n--- Latent Evaluation: Translated Result (RNA + Translated ATAC) ---")
+    res_translated = evaluate_translation(latent_matrix=z_fused_hat, **eval_params)
+
+    print("\n--- Latent Evaluation: Translated ATAC Only ---")
+    res_translated_atac = evaluate_translation(latent_matrix=f_atac_hat, **eval_params)
+    
+    print("\n--- Latent Evaluation: Lower Bound (RNA Only Base) ---")
+    res_lower = evaluate_translation(latent_matrix=f_rna, **eval_params)
+
+    summary_df = pd.DataFrame(
+        [
+            {"group": "lower_rna", **res_lower},
+            {"group": "translated", **res_translated},
+            {"group": "translated_atac", **res_translated_atac},
+            {"group": "upper_true", **res_upper},
+        ]
     )
-    print("Translation Evaluation - Summary:")
-    print(results)
+    eval_out_dir = cfg_for_log["project"].get("eval_dir", os.path.dirname(save_dir.rstrip("/\\")))
+    os.makedirs(eval_out_dir, exist_ok=True)
+    summary_name = stage35_io_cfg.get("summary_csv_name", "translation_eval_stage35.csv")
+    summary_path = os.path.join(eval_out_dir, summary_name)
+    summary_df.to_csv(summary_path, index=False)
 
+    # 日志输出对照表
     if logger is not None:
-        logger.info(
-            "Translation metrics | RMSE=%.4f | SpotPCC=%.4f | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | Moran=%.4f",
-            float(results["reconstruction"]["rmse"]),
-            float(results["reconstruction"]["spotwise_pcc"]),
-            float(results["clustering"]["ari"]),
-            float(results["clustering"]["nmi"]),
-            float(results["clustering"]["ami"]),
-            float(results["clustering"]["hom"]),
-            float(results["spatial_autocorrelation"]["moran_i_avg"]),
-        )
-        logger.info("Translation evaluation complete.")
-        if os.environ.get("SF_PIPELINE_RUN") != "1" and log_path is not None:
-            _append_log_separator(log_path)
+        def log_res(name, r):
+            logger.info(
+                "%-18s | ARI=%.4f | NMI=%.4f | AMI=%.4f | HOM=%.4f | Moran=%.4f",
+                name,
+                float(r["ari"]),
+                float(r["nmi"]),
+                float(r["ami"]),
+                float(r["hom"]),
+                float(r["moran"]),
+            )
 
+        logger.info("-" * 88)
+        log_res("Upper Bound (True)", res_upper)
+        log_res("Translated Result", res_translated)
+        log_res("Translated ATAC", res_translated_atac)
+        log_res("Lower Bound (RNA)", res_lower)
+        logger.info("Saved summary CSV: %s", os.path.abspath(summary_path))
+        logger.info("-" * 88)
+
+        logger.info("Latent translation evaluation complete.")
+        if os.environ.get("SF_PIPELINE_RUN") != "1" and log_path is not None:
+            append_log_separator(log_path)
+            
+    # 终端对比输出
+    print("\n=== Translation Performance Summary ===")
+    print(
+        f"{'Metric':<10} | {'Lower (RNA)':<12} | {'Translated':<12} | {'Trans ATAC':<12} | {'Upper (True)':<12}"
+    )
+    print("-" * 73)
+    for m in ['ari', 'nmi', 'ami', 'hom', 'moran']:
+        print(
+            f"{m.upper():<10} | {float(res_lower[m]):<12.4f} | {float(res_translated[m]):<12.4f} | {float(res_translated_atac[m]):<12.4f} | {float(res_upper[m]):<12.4f}"
+        )
+    print("-" * 73)
+    print(f"Saved CSV: {os.path.abspath(summary_path)}")
+    print("=======================================\n")
 
 if __name__ == "__main__":
     main()

@@ -1,17 +1,20 @@
 import os
 import argparse
-import logging
 import torch
-import yaml
+from tqdm.auto import trange
 
 from sf_model.model.bio_sfinet import BioSFINet, SF_Translator_R2A
 from sf_model.trainer import SFTrainer
 from sf_model.utils import set_seed
-
-
-def load_config(config_path="configs/config_human.yaml"):
-    with open(config_path, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f)
+from .translation_runtime import (
+    append_log_separator,
+    load_config,
+    load_processed_data,
+    resolve_backbone_checkpoint,
+    resolve_train_log_path,
+    setup_file_logger,
+    torch_load_compat,
+)
 
 
 def parse_args():
@@ -20,7 +23,12 @@ def parse_args():
     parser.add_argument(
         "--backbone-checkpoint",
         default=None,
-        help="Backbone checkpoint key or filename. Defaults to config eval.checkpoint",
+        help="Backbone checkpoint key or filename. Can be key in --backbone-config eval.checkpoints",
+    )
+    parser.add_argument(
+        "--backbone-config",
+        default=None,
+        help="Optional source config path for frozen backbone (e.g., S1 config when training S2 translator)",
     )
     parser.add_argument("--epochs", type=int, default=None, help="Translator training epochs")
     parser.add_argument("--lr", type=float, default=None, help="Translator learning rate")
@@ -38,99 +46,86 @@ def parse_args():
     return parser.parse_args()
 
 
-def resolve_train_log_path(save_dir):
-    save_dir = save_dir.rstrip("/\\")
-    if os.path.basename(save_dir) == "checkpoints":
-        return os.path.join(os.path.dirname(save_dir), "train.log")
-    return os.path.join(save_dir, "train.log")
-
-
-def setup_logger(log_path):
-    logger = logging.getLogger("SFTranslatorTrain")
-    logger.setLevel(logging.INFO)
-    logger.propagate = False
-    logger.handlers.clear()
-
-    os.makedirs(os.path.dirname(log_path), exist_ok=True)
-    handler = logging.FileHandler(log_path, mode="a", encoding="utf-8")
-    handler.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s | %(levelname)s | %(name)s | %(message)s")
-    handler.setFormatter(formatter)
-    logger.addHandler(handler)
-
-    # 同步输出到终端，避免看起来像“没有运行”。
-    stream_handler = logging.StreamHandler()
-    stream_handler.setLevel(logging.INFO)
-    stream_handler.setFormatter(formatter)
-    logger.addHandler(stream_handler)
-    return logger
-
-
-def append_log_separator(log_path):
-    with open(log_path, "a", encoding="utf-8") as f:
-        f.write("\n" + "=" * 88 + "\n")
-
-
-def torch_load_compat(path, map_location, weights_only):
-    try:
-        return torch.load(path, map_location=map_location, weights_only=weights_only)
-    except TypeError:
-        return torch.load(path, map_location=map_location)
-
-
-def resolve_checkpoint_path(args_ckpt, config, save_dir):
-    eval_cfg = config.get("eval", {})
-    ckpt_key = args_ckpt or eval_cfg.get("checkpoint", "best")
-    ckpt_map = eval_cfg.get("checkpoints", {})
-    ckpt_name = ckpt_map.get(ckpt_key, ckpt_map.get(str(ckpt_key), ckpt_key))
-    ckpt_name = str(ckpt_name)
-
-    candidates = []
-    if os.path.isabs(ckpt_name):
-        candidates.append(ckpt_name)
-    else:
-        candidates.append(os.path.join(save_dir, ckpt_name))
-
-    # 兼容 checkpoint 为纯轮次 key（如 "2100"）或不带后缀写法。
-    if "/" not in ckpt_name and "\\" not in ckpt_name:
-        if ckpt_name.isdigit():
-            candidates.append(os.path.join(save_dir, f"ckpt_{ckpt_name}.pth"))
-        elif ckpt_name.startswith("ckpt_") and not ckpt_name.endswith(".pth"):
-            candidates.append(os.path.join(save_dir, f"{ckpt_name}.pth"))
-
-    for candidate in candidates:
-        if os.path.exists(candidate):
-            return candidate, os.path.basename(candidate)
-
-    return candidates[0], ckpt_name
-
-
 def main():
     args = parse_args()
     config = load_config(args.config)
+    translation_cfg = config.get("translation", {})
+    stage2_cfg = translation_cfg.get("stage2", {})
+    stage2_backbone_cfg = stage2_cfg.get("backbone", {})
+    stage2_data_cfg = stage2_cfg.get("data", {})
+    stage2_model_cfg = stage2_cfg.get("model", {})
+    stage2_train_cfg = stage2_cfg.get("train", {})
+    stage2_save_cfg = stage2_cfg.get("save", {})
 
     seed = int(config["project"].get("seed", 42))
     set_seed(seed)
 
     save_dir = config["project"]["save_dir"]
     log_path = resolve_train_log_path(save_dir)
-    logger = setup_logger(log_path)
+    logger = setup_file_logger("SFTranslatorTrain", log_path, with_stream=False)
 
     translator_cfg = config.get("translator", {})
-    translator_epochs = int(args.epochs if args.epochs is not None else translator_cfg.get("epochs", 300))
-    translator_lr = float(args.lr if args.lr is not None else translator_cfg.get("learning_rate", 1e-4))
-    translator_wd = float(args.weight_decay if args.weight_decay is not None else translator_cfg.get("weight_decay", 1e-4))
-    translator_blocks = int(args.n_blocks if args.n_blocks is not None else translator_cfg.get("n_blocks", 3))
-    lambda_cosine = float(args.lambda_cosine if args.lambda_cosine is not None else translator_cfg.get("lambda_cosine", 1.0))
-    lambda_mse = float(args.lambda_mse if args.lambda_mse is not None else translator_cfg.get("lambda_mse", 1.0))
-    lambda_recon = float(args.lambda_recon if args.lambda_recon is not None else translator_cfg.get("lambda_recon", 1.0))
-    save_every = int(args.save_every if args.save_every is not None else translator_cfg.get("save_every", 50))
+    translator_epochs = int(
+        args.epochs
+        if args.epochs is not None
+        else stage2_train_cfg.get("epochs", translator_cfg.get("epochs", 300))
+    )
+    translator_lr = float(
+        args.lr
+        if args.lr is not None
+        else stage2_train_cfg.get("learning_rate", translator_cfg.get("learning_rate", 1e-4))
+    )
+    translator_wd = float(
+        args.weight_decay
+        if args.weight_decay is not None
+        else stage2_train_cfg.get("weight_decay", translator_cfg.get("weight_decay", 1e-4))
+    )
+    translator_blocks = int(
+        args.n_blocks
+        if args.n_blocks is not None
+        else stage2_model_cfg.get("n_blocks", translator_cfg.get("n_blocks", 3))
+    )
+    lambda_cosine = float(
+        args.lambda_cosine
+        if args.lambda_cosine is not None
+        else stage2_train_cfg.get("lambda_cosine", translator_cfg.get("lambda_cosine", 1.0))
+    )
+    lambda_mse = float(
+        args.lambda_mse
+        if args.lambda_mse is not None
+        else stage2_train_cfg.get("lambda_mse", translator_cfg.get("lambda_mse", 1.0))
+    )
+    lambda_recon = float(
+        args.lambda_recon
+        if args.lambda_recon is not None
+        else stage2_train_cfg.get("lambda_recon", translator_cfg.get("lambda_recon", 1.0))
+    )
+    save_every = int(
+        args.save_every
+        if args.save_every is not None
+        else stage2_save_cfg.get("save_every", translator_cfg.get("save_every", 50))
+    )
 
     translator_dir = os.path.join(save_dir, "translator_checkpoints")
     os.makedirs(translator_dir, exist_ok=True)
-    best_name = args.translator_save_name or translator_cfg.get("best_name", "translator_r2a_best.pth")
+    best_name = (
+        args.translator_save_name
+        or stage2_save_cfg.get("best_name")
+        or translator_cfg.get("best_name", "translator_r2a_best.pth")
+    )
     best_path = os.path.join(translator_dir, best_name)
     last_path = os.path.join(translator_dir, "translator_r2a_last.pth")
+
+    backbone_checkpoint = (
+        args.backbone_checkpoint
+        if args.backbone_checkpoint is not None
+        else stage2_backbone_cfg.get("checkpoint", None)
+    )
+    backbone_config = (
+        args.backbone_config
+        if args.backbone_config is not None
+        else stage2_backbone_cfg.get("config", None)
+    )
 
     logger.info("[Stage 2] Starting translator training")
     logger.info(
@@ -143,16 +138,25 @@ def main():
         lambda_mse,
         lambda_recon,
     )
+    logger.info("Backbone source: config=%s checkpoint=%s", str(backbone_config), str(backbone_checkpoint))
 
-    processed_dir = config["data"]["processed_path"]
-    data_path = os.path.join(processed_dir, "processed_data.pt")
-    if not os.path.exists(data_path):
-        logger.error("Data file not found at %s", data_path)
+    log_interval = int(config.get("train", {}).get("log_interval", 10))
+
+    stage2_data_config = stage2_data_cfg.get("config", None)
+    data_config = config
+    if stage2_data_config:
+        data_config = load_config(stage2_data_config)
+        logger.info("Stage 2 data source: %s", stage2_data_config)
+    else:
+        logger.info("Stage 2 data source: %s", args.config)
+
+    try:
+        data_dict = load_processed_data(data_config)
+    except FileNotFoundError as e:
+        logger.error(str(e))
         logger.error("Please run preprocess first.")
         raise SystemExit(1)
-
-    logger.info("Loading processed data from %s", data_path)
-    data_dict = torch_load_compat(data_path, map_location="cpu", weights_only=False)
+    logger.info("Loading processed data from %s", data_dict["_data_path"])
 
     rna_feat = data_dict["rna_feat"]
     atac_feat = data_dict["atac_feat"]
@@ -168,17 +172,23 @@ def main():
 
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
 
-    ckpt_path, ckpt_name = resolve_checkpoint_path(args.backbone_checkpoint, config, save_dir)
+    ckpt_path, ckpt_name, ckpt_source = resolve_backbone_checkpoint(
+        target_config=config,
+        backbone_checkpoint=backbone_checkpoint,
+        backbone_config_path=backbone_config,
+    )
     if not os.path.exists(ckpt_path):
         logger.error("Backbone checkpoint not found at %s", ckpt_path)
-        logger.error("Please train backbone first or pass --backbone-checkpoint (e.g. ckpt_2100.pth).")
+        logger.error(
+            "Please train backbone first or pass --backbone-config/--backbone-checkpoint (e.g. --backbone-config S1 --backbone-checkpoint best)."
+        )
         raise SystemExit(1)
 
-    logger.info("Loading frozen backbone checkpoint: %s", ckpt_name)
+    logger.info("Loading frozen backbone checkpoint: %s (source=%s)", ckpt_name, ckpt_source)
     state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
 
-    hidden_dim = int(config["model"].get("sfib_dim", 128))
+    hidden_dim = int(stage2_model_cfg.get("hidden_dim", config["model"].get("sfib_dim", 128)))
     translator = SF_Translator_R2A(hidden_dim=hidden_dim, n_blocks=translator_blocks).to(device)
     translator_optimizer = torch.optim.AdamW(
         translator.parameters(),
@@ -189,7 +199,8 @@ def main():
     trainer = SFTrainer(model, config, device=device)
 
     best_loss = float("inf")
-    for epoch in range(1, translator_epochs + 1):
+    progress = trange(1, translator_epochs + 1, desc="Training Translator", unit="epoch", dynamic_ncols=True)
+    for epoch in progress:
         metrics = trainer.train_translator_epoch(
             translator=translator,
             translator_optimizer=translator_optimizer,
@@ -212,7 +223,15 @@ def main():
             epoch_path = os.path.join(translator_dir, f"translator_r2a_ckpt_{epoch}.pth")
             torch.save(translator.state_dict(), epoch_path)
 
-        if epoch == 1 or epoch % 10 == 0 or epoch == translator_epochs:
+        progress.set_postfix(
+            total=f"{metrics['total']:.4f}",
+            cosine=f"{metrics['cosine']:.4f}",
+            mse=f"{metrics['mse']:.4f}",
+            recon=f"{metrics['recon']:.4f}",
+            best=f"{best_loss:.4f}",
+        )
+
+        if epoch == 1 or epoch % max(1, log_interval) == 0 or epoch == translator_epochs:
             logger.info(
                 "Translator Epoch %03d | total %.4f | cosine %.4f | mse %.4f | recon %.4f | best %.4f",
                 epoch,

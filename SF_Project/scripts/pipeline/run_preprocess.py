@@ -6,6 +6,7 @@ import torch
 import yaml
 import numpy as np
 import scanpy as sc
+import joblib
 from scipy import sparse
 from sklearn.decomposition import PCA, TruncatedSVD
 
@@ -18,7 +19,7 @@ from sf_model.preprocess.io import (
     read_h5ad_rna_atac,
 )
 from sf_model.preprocess.rna_process import process_rna_pipeline
-from sf_model.preprocess.atac_process import process_atac_pipeline
+from sf_model.preprocess.atac_process import process_atac_pipeline, custom_tf_idf
 from sf_model.utils import build_spatial_graph, set_seed
 
 def load_config(config_path="configs/config_human.yaml"):
@@ -29,6 +30,16 @@ def load_config(config_path="configs/config_human.yaml"):
 def parse_args():
     parser = argparse.ArgumentParser(description="Preprocess raw spatial multi-omics data")
     parser.add_argument("--config", default="configs/config_human.yaml", help="Path to YAML config file")
+    parser.add_argument(
+        "--save-pca-dir",
+        default=None,
+        help="Optional directory to save fitted modality reducers (S1 mode)",
+    )
+    parser.add_argument(
+        "--load-pca-dir",
+        default=None,
+        help="Optional directory to load pre-fitted modality reducers and transform only (S2 mode)",
+    )
     return parser.parse_args()
 
 
@@ -49,7 +60,67 @@ def infer_ground_truth_key(obs_df, preferred_key=None):
     return None
 
 
-def reduce_modality_features(X, n_components, seed, modality_name, reduce_cfg=None):
+def align_adata_features_hard(adata, target_features, modality_name="modality"):
+    """
+    Hard-align adata features to target_features with strict 1:1 semantics:
+    - Keep intersection features
+    - Zero-pad missing features
+    - Return matrix reordered exactly as target_features
+    """
+    target_features = [str(x) for x in target_features]
+    if len(target_features) == 0:
+        raise ValueError(f"[{modality_name}] target_features is empty.")
+
+    target_set = set(target_features)
+    current_set = set(adata.var_names.astype(str).tolist())
+
+    present = [f for f in target_features if f in current_set]
+    missing = [f for f in target_features if f not in current_set]
+
+    adata_sub = adata[:, present].copy()
+    X_sub = adata_sub.X
+
+    if sparse.issparse(X_sub):
+        X_sub = X_sub.tocsr().astype(np.float32)
+    else:
+        X_sub = np.asarray(X_sub, dtype=np.float32)
+
+    if len(missing) > 0:
+        X_missing = sparse.csr_matrix((adata_sub.n_obs, len(missing)), dtype=np.float32)
+        if sparse.issparse(X_sub):
+            X_aligned = sparse.hstack([X_sub, X_missing], format="csr")
+        else:
+            X_aligned = np.hstack([X_sub, np.zeros((adata_sub.n_obs, len(missing)), dtype=np.float32)])
+    else:
+        X_aligned = X_sub
+
+    final_var_names = present + missing
+    aligned = sc.AnnData(X=X_aligned, obs=adata_sub.obs.copy())
+    aligned.var_names = final_var_names
+
+    # Copy spatial coordinates (and any other obsm slots) for downstream graph build.
+    for key, val in adata_sub.obsm.items():
+        aligned.obsm[key] = val.copy()
+
+    # Enforce exact target order (present+missing already follows target order; keep explicit for safety).
+    aligned = aligned[:, target_features].copy()
+
+    print(
+        f"   [{modality_name}] Hard-align summary: target={len(target_features)} | "
+        f"present={len(present)} | missing(padded)={len(missing)}"
+    )
+    return aligned
+
+
+def reduce_modality_features(
+    X,
+    n_components,
+    seed,
+    modality_name,
+    reduce_cfg=None,
+    save_model_path=None,
+    load_model_path=None,
+):
     """
     使用 PCA/TruncatedSVD 将模态特征降到固定维度。
     - 稀疏输入优先使用 TruncatedSVD，避免转 dense 导致内存开销过大。
@@ -74,13 +145,35 @@ def reduce_modality_features(X, n_components, seed, modality_name, reduce_cfg=No
     t0 = time.perf_counter()
     print(f"   [{modality_name}] Reducing features to {n_components} dims (deterministic-cpu)...")
 
-    if sparse.issparse(X):
-        reducer = TruncatedSVD(n_components=n_components, random_state=int(seed))
-        Z = reducer.fit_transform(X)
+    use_load_mode = load_model_path is not None and os.path.exists(load_model_path)
+
+    if use_load_mode:
+        print(f"   [{modality_name}] Loading reducer and transform-only: {load_model_path}")
+        reducer = joblib.load(load_model_path)
+        if sparse.issparse(X):
+            Z = reducer.transform(X)
+        else:
+            X_dense = np.asarray(X, dtype=np.float32)
+            Z = reducer.transform(X_dense)
     else:
-        X_dense = np.asarray(X, dtype=np.float32)
-        reducer = PCA(n_components=n_components, random_state=int(seed), svd_solver='auto')
-        Z = reducer.fit_transform(X_dense)
+        if load_model_path is not None and not os.path.exists(load_model_path):
+            print(
+                f"   ⚠️ [{modality_name}] Reducer file not found at {load_model_path}; "
+                "falling back to fit_transform."
+            )
+
+        if sparse.issparse(X):
+            reducer = TruncatedSVD(n_components=n_components, random_state=int(seed))
+            Z = reducer.fit_transform(X)
+        else:
+            X_dense = np.asarray(X, dtype=np.float32)
+            reducer = PCA(n_components=n_components, random_state=int(seed), svd_solver='auto')
+            Z = reducer.fit_transform(X_dense)
+
+        if save_model_path is not None:
+            os.makedirs(os.path.dirname(save_model_path), exist_ok=True)
+            joblib.dump(reducer, save_model_path)
+            print(f"   [{modality_name}] Saved reducer: {save_model_path}")
 
     dt = time.perf_counter() - t0
     print(f"   [{modality_name}] Dim reduction done in {dt:.2f}s")
@@ -131,9 +224,9 @@ def main():
     files = config['data']['files']
     params = config['data']['parameters']
     rna_min_cells = params.get('rna_min_cells', 3)
-    rna_target_sum = params.get('rna_target_sum', 1e4)
+    rna_target_sum = float(params.get('rna_target_sum', 1e4))
     atac_min_cells = params.get('atac_min_cells', 50)
-    atac_target_sum = params.get('atac_target_sum', 1e4)
+    atac_target_sum = float(params.get('atac_target_sum', 1e4))
     tfidf_eps = float(params.get('tfidf_eps', 1e-6))
     seed = int(config['project'].get('seed', 42))
     reduce_cfg = params.get('reduce', {})
@@ -141,6 +234,45 @@ def main():
     use_rna_similarity_edge_weight = bool(params.get('use_rna_similarity_edge_weight', True))
     
     os.makedirs(processed_dir, exist_ok=True)
+
+    save_pca_dir = args.save_pca_dir
+    load_pca_dir = args.load_pca_dir
+    if save_pca_dir is not None:
+        os.makedirs(save_pca_dir, exist_ok=True)
+    if load_pca_dir is not None:
+        os.makedirs(load_pca_dir, exist_ok=True)
+
+    rna_model_save_path = os.path.join(save_pca_dir, "pca_model_rna.pkl") if save_pca_dir else None
+    atac_model_save_path = os.path.join(save_pca_dir, "pca_model_atac.pkl") if save_pca_dir else None
+    rna_model_load_path = os.path.join(load_pca_dir, "pca_model_rna.pkl") if load_pca_dir else None
+    atac_model_load_path = os.path.join(load_pca_dir, "pca_model_atac.pkl") if load_pca_dir else None
+
+    fit_save_mode = (load_pca_dir is None) and (save_pca_dir is not None)
+    load_align_mode = load_pca_dir is not None
+
+    if load_pca_dir is not None:
+        logger.info(
+            "PCA mode: load-and-transform | dir=%s | rna_model=%s | atac_model=%s",
+            load_pca_dir,
+            rna_model_load_path,
+            atac_model_load_path,
+        )
+    elif save_pca_dir is not None:
+        logger.info(
+            "PCA mode: fit-and-save | dir=%s | rna_model=%s | atac_model=%s",
+            save_pca_dir,
+            rna_model_save_path,
+            atac_model_save_path,
+        )
+    else:
+        logger.info("PCA mode: fit-only (no save/load reducer path provided)")
+
+    if fit_save_mode:
+        logger.info("Feature mode: fit-and-save vars (S1)")
+    elif load_align_mode:
+        logger.info("Feature mode: load-and-hard-align vars (S2)")
+    else:
+        logger.info("Feature mode: standalone preprocess (no cross-domain var alignment)")
 
     # ==========================================
     # Step 1: 加载原始数据
@@ -218,36 +350,98 @@ def main():
     # Step 3: 执行预处理管线
     # ==========================================
     
-    # --- RNA ---
-    # 预防性措施：在传入 pipeline 之前，确保它是 float32
-    # 这样即使不修改 rna_process.py，也能避免 normalize_total 报错
-    if hasattr(adata_rna.X, "astype"):
-        adata_rna.X = adata_rna.X.astype(np.float32)
-        
-    print("\n🧪 Processing RNA...")
-    adata_rna = process_rna_pipeline(
-        adata_rna,
-        n_top_genes=params['n_top_genes'],
-        min_cells=rna_min_cells,
-        target_sum=rna_target_sum,
-    )
+    if load_align_mode:
+        print("\n🧪 Processing RNA/ATAC in LOAD+ALIGN mode (skip HVG/peak selection)...")
+        rna_vars_path = os.path.join(load_pca_dir, "rna_vars.txt")
+        atac_vars_path = os.path.join(load_pca_dir, "atac_vars.txt")
+        if not os.path.exists(rna_vars_path) or not os.path.exists(atac_vars_path):
+            raise FileNotFoundError(
+                "LOAD+ALIGN mode requires rna_vars.txt and atac_vars.txt under --load-pca-dir. "
+                f"missing: rna={rna_vars_path}, atac={atac_vars_path}"
+            )
 
-    # --- ATAC ---
-    print("\n🧪 Processing ATAC...")
-    gtf_path = os.path.join(raw_dir, files['gtf'])
-    rna_genes = adata_rna.var_names.tolist()
-    
-    adata_atac, _ = process_atac_pipeline(
-        adata_atac, 
-        rna_genes=rna_genes, 
-        gtf_path=gtf_path,
-        n_global=params['n_global_peaks'],
-        n_final=params['n_final_peaks'],
-        window=params['tss_window'],
-        min_cells=atac_min_cells,
-        target_sum=atac_target_sum,
-        tfidf_eps=tfidf_eps,
-    )
+        src_rna_vars = np.atleast_1d(np.loadtxt(rna_vars_path, dtype=str)).tolist()
+        src_atac_vars = np.atleast_1d(np.loadtxt(atac_vars_path, dtype=str)).tolist()
+        logger.info(
+            "Loaded source feature lists | RNA=%d from %s | ATAC=%d from %s",
+            len(src_rna_vars),
+            rna_vars_path,
+            len(src_atac_vars),
+            atac_vars_path,
+        )
+
+        # 1) hard-align features to source-domain lists
+        adata_rna = align_adata_features_hard(adata_rna, src_rna_vars, modality_name="RNA")
+        adata_atac = align_adata_features_hard(adata_atac, src_atac_vars, modality_name="ATAC")
+
+        # 2) manual normalization compensation after skipping default pipelines
+        if sparse.issparse(adata_rna.X):
+            adata_rna.X = adata_rna.X.tocsr().astype(np.float32)
+        else:
+            adata_rna.X = np.asarray(adata_rna.X, dtype=np.float32)
+        sc.pp.normalize_total(adata_rna, target_sum=float(rna_target_sum))
+        sc.pp.log1p(adata_rna)
+
+        adata_atac = custom_tf_idf(adata_atac, eps=tfidf_eps)
+        X_atac = adata_atac.X
+        if sparse.issparse(X_atac):
+            X_atac = X_atac.tocsr().astype(np.float32)
+            data = X_atac.data
+            data[~np.isfinite(data)] = 0.0
+            X_atac.data = data
+            adata_atac.X = X_atac
+        else:
+            X_atac = np.asarray(X_atac, dtype=np.float32)
+            X_atac[~np.isfinite(X_atac)] = 0.0
+            adata_atac.X = X_atac
+        sc.pp.normalize_total(adata_atac, target_sum=float(atac_target_sum))
+        sc.pp.log1p(adata_atac)
+
+    else:
+        # --- RNA ---
+        # 预防性措施：在传入 pipeline 之前，确保它是 float32
+        # 这样即使不修改 rna_process.py，也能避免 normalize_total 报错
+        if hasattr(adata_rna.X, "astype"):
+            adata_rna.X = adata_rna.X.astype(np.float32)
+
+        print("\n🧪 Processing RNA...")
+        adata_rna = process_rna_pipeline(
+            adata_rna,
+            n_top_genes=params['n_top_genes'],
+            min_cells=rna_min_cells,
+            target_sum=rna_target_sum,
+        )
+
+        # --- ATAC ---
+        print("\n🧪 Processing ATAC...")
+        gtf_path = os.path.join(raw_dir, files['gtf'])
+        rna_genes = adata_rna.var_names.tolist()
+
+        adata_atac, _ = process_atac_pipeline(
+            adata_atac,
+            rna_genes=rna_genes,
+            gtf_path=gtf_path,
+            n_global=params['n_global_peaks'],
+            n_final=params['n_final_peaks'],
+            window=params['tss_window'],
+            min_cells=atac_min_cells,
+            target_sum=atac_target_sum,
+            tfidf_eps=tfidf_eps,
+        )
+
+        # S1 fit&save mode: persist selected feature lists for cross-domain hard alignment.
+        if fit_save_mode:
+            rna_vars_path = os.path.join(save_pca_dir, "rna_vars.txt")
+            atac_vars_path = os.path.join(save_pca_dir, "atac_vars.txt")
+            np.savetxt(rna_vars_path, np.asarray(adata_rna.var_names, dtype=str), fmt="%s")
+            np.savetxt(atac_vars_path, np.asarray(adata_atac.var_names, dtype=str), fmt="%s")
+            logger.info(
+                "Saved selected feature lists | RNA=%d -> %s | ATAC=%d -> %s",
+                adata_rna.n_vars,
+                rna_vars_path,
+                adata_atac.n_vars,
+                atac_vars_path,
+            )
 
     # 预处理后再做一次强制对齐：按 RNA 条码对 ATAC 取子集并重排。
     # 这一步可兜底处理任一模态在上游发生了细胞过滤的情况。
@@ -276,8 +470,24 @@ def main():
     atac_pca_dim = int(params.get('atac_pca_dim', 512))
 
     print("\n📉 Reducing RNA/ATAC features before model input...")
-    rna_feat_np = reduce_modality_features(adata_rna.X, rna_pca_dim, seed, "RNA", reduce_cfg=reduce_cfg)
-    atac_feat_np = reduce_modality_features(adata_atac.X, atac_pca_dim, seed, "ATAC", reduce_cfg=reduce_cfg)
+    rna_feat_np = reduce_modality_features(
+        adata_rna.X,
+        rna_pca_dim,
+        seed,
+        "RNA",
+        reduce_cfg=reduce_cfg,
+        save_model_path=rna_model_save_path,
+        load_model_path=rna_model_load_path,
+    )
+    atac_feat_np = reduce_modality_features(
+        adata_atac.X,
+        atac_pca_dim,
+        seed,
+        "ATAC",
+        reduce_cfg=reduce_cfg,
+        save_model_path=atac_model_save_path,
+        load_model_path=atac_model_load_path,
+    )
     print(f"   ✅ Reduced RNA shape: {rna_feat_np.shape}")
     print(f"   ✅ Reduced ATAC shape: {atac_feat_np.shape}")
     logger.info("Reduced shapes: RNA=%s, ATAC=%s", rna_feat_np.shape, atac_feat_np.shape)

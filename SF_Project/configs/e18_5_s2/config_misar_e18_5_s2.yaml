@@ -22,7 +22,40 @@ eval:                                 # 评估配置
     palette_mode: "high_contrast"     # 调色板模式
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
-    final: "ckpt_300.pth"            # 最终/指定轮次 checkpoint 文件名
+    final: "ckpt_3000.pth"            # 最终/指定轮次 checkpoint 文件名
+
+translation:                          # 翻译专项配置（Stage 2 / Stage 3.5）
+  stage2:                             # 翻译器训练
+    data:                             # 训练数据来源（用于只改切片、不改训练/保存设置）
+      config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # Stage2 训练用 S1 切片数据
+    backbone:                         # 冻结主干来源（通常指向 S1）
+      config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
+      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+    model:                            # 翻译器结构
+      n_blocks: 3                     # SF_Translator_R2A 残差 MLP 层数
+      hidden_dim: 128                 # 翻译器隐层维度（默认与 sfib_dim 一致）
+    train:                            # 翻译器训练超参数
+      epochs: 1000                     # Stage2 训练轮数
+      learning_rate: 1e-3             # 学习率
+      weight_decay: 1e-4              # 权重衰减
+      lambda_cosine: 1.0              # 潜变量余弦损失权重
+      lambda_mse: 1.0                 # 潜变量 MSE 损失权重
+      lambda_recon: 1.0               # WeightedMSE 重构损失权重
+    save:                             # 翻译器权重保存
+      save_every: 50                  # 间隔保存
+      best_name: "translator_r2a_best.pth"  # 最优翻译器文件名
+
+  stage35:                            # 翻译评估
+    backbone:                         # 评估时冻结主干来源
+      config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
+      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+    metrics:                          # 评估指标参数
+      n_clusters: 14                  # mclust 目标簇数
+      pca_dim: 20                     # mclust 前 PCA 维度
+      moran_k: 6                      # Moran's I 邻居数
+    io:                               # 评估输出与输入
+      translator_checkpoint: null     # 可选：指定翻译器路径；null 时用 stage2.save.best_name
+      summary_csv_name: "translation_eval_stage35.csv"  # 评估汇总文件名
 
 data:                                 # 数据配置
   raw_path: "data/raw/misar/misar_e18-5-s2"    # 原始数据目录
@@ -48,7 +81,7 @@ data:                                 # 数据配置
     atac_target_sum: 1e4              # ATAC 归一化目标总和
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
-    knn_k: 6                          # 空间图 k 近邻
+    knn_k: 9                          # 空间图 k 近邻
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置

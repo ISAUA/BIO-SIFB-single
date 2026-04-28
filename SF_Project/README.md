@@ -84,18 +84,19 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ck
 
 先确保已进入环境：`conda activate sc_bridge`
 
-使用已训练好的主干 checkpoint，训练 `SF_Translator_R2A`：
+当前推荐使用 S2 配置统一驱动翻译训练（主干来源、层数、loss 权重等由 `translation.stage2` 控制；训练数据来源由 `translation.stage2.data.config` 指向 S1）：
 
 ```bash
-python run_train_translator.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml
-python run_train_translator.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --backbone-checkpoint ckpt_2100.pth
+python run_train_translator.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
 ```
 
-常用可选参数（覆盖配置）：
+如需临时覆盖配置（优先级高于 YAML）：
 
 ```bash
 python run_train_translator.py \
-	--config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+	--config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+	--backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+	--backbone-checkpoint 2100 \
 	--epochs 400 \
 	--lr 1e-4 \
 	--n-blocks 3 \
@@ -104,23 +105,32 @@ python run_train_translator.py \
 	--lambda-recon 1.0
 ```
 
+如需切换翻译器训练数据切片，请直接修改 `translation.stage2.data.config`（例如从 S1 切到 S2）。
+
 输出默认保存在 `save_dir/translator_checkpoints/`，包含 best 与 last 权重文件。
 
 ### 跨模态翻译评估（Translation Evaluation）
 
-使用新增脚本直接评估翻译结果（RMSE / Spot-wise PCC / ARI / NMI / AMI / HOM / Moran's I）。先激活环境：`conda activate sc_bridge`
+当前评估为 Stage 3.5 潜变量评估（Lower/Translated/Upper 三组对照），输出 ARI / NMI / AMI / HOM / Cluster Moran's I。先激活环境：`conda activate sc_bridge`
+
+```bash
+python evaluate_translation.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
+```
+
+如需覆盖默认配置（`translation.stage35`）：
 
 ```bash
 python evaluate_translation.py \
-	--config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
-	--backbone-checkpoint ckpt_2100.pth \
-	--translator-checkpoint results/misar/misar_e18-5-s1/checkpoints/translator_checkpoints/translator_r2a_best.pth \
+	--config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+	--backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+	--backbone-checkpoint 2100 \
+	--translator-checkpoint results/misar/misar_e18-5-s2/checkpoints/translator_checkpoints/translator_r2a_best.pth \
 	--n-clusters 14 \
 	--pca-dim 20 \
 	--moran-k 6
 ```
 
-如果你已经单独导出了 `pred_atac.npy / true_atac.npy / labels.npy / coords.npy`，脚本也支持原来的文件输入模式；但上面这条是推荐的直接可用命令。
+评估结果会在 `project.eval_dir` 下输出汇总文件 `translation_eval_stage35.csv`。
 
 可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
 
@@ -137,7 +147,7 @@ SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.
 当你需要一次性评估一段轮次（例如 1500-2000）时：
 
 ```bash
-python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
+python run_evaluate_range.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
 ```
 
 小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：

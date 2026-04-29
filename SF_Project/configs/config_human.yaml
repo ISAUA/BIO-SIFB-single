@@ -57,6 +57,23 @@ data:                                 # 数据配置
     knn_k: 10                         # 空间图 k 近邻
 
 # ------------------------------------------
+# 1.5 代谢组 (SM) 专用配置
+# ------------------------------------------
+sm_data_path: ""                       # 代谢组 h5ad 路径，留空则跳过
+sm_preprocess:
+  apply_log1p: true                   # 是否对强度执行 log1p
+  spatial_hvg_method: "morans_i"     # 空间高变特征选择方法
+  n_top_metabolites: 500              # SVMs 保留数量
+  apply_scale: true                   # 是否进行 Z-score
+  use_pca: false                      # 强制关闭 PCA
+  pval_threshold: 0.05                # Moran's I 显著性阈值
+  drop_dead_spots: false              # 是否移除全零点位
+  spatial_graph_method: "knn"        # knn|radius
+  moran_k: 6                          # 空间邻居数
+  radius: null                        # radius 模式下的距离阈值
+  moran_permutations: 0               # 置 0 使用解析 p-value
+
+# ------------------------------------------
 # 2. 模型架构参数
 # ------------------------------------------
 model:                                # 模型结构配置

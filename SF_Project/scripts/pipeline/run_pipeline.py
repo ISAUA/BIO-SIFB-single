@@ -11,6 +11,10 @@ DATASET_CONFIG = {
     "human": "configs/config_human.yaml",
     "mouse": "configs/config_mouse.yaml",
     "mouse_brain_p22": "configs/config_mouse_brain_p22.yaml",
+    # renal 原先为单一数据集，已拆分为 R114_T 与 Y7_T
+    "renal": "configs/renal/config_renal_R114_T.yaml",
+    "R114_T": "configs/renal/config_renal_R114_T.yaml",
+    "Y7_T": "configs/renal/config_renal_Y7_T.yaml",
     "misar_e11_0_s1": "configs/e11_0_s1/config_misar_e11_0_s1.yaml",
     "misar_e11_0_s2": "configs/e11_0_s2/config_misar_e11_0_s2.yaml",
     "misar_e13_5_s1": "configs/e13_5_s1/config_misar_e13_5_s1.yaml",

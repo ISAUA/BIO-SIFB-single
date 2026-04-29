@@ -6,6 +6,7 @@
 
 - human
 - mouse（P22）
+- renal（SM 替换 ATAC）
 - MISAR：e11/e13.5/e15.5/e18.5 的 s1/s2 共 8 组
 
 ## 依赖安装
@@ -142,12 +143,43 @@ SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.
 
 `--dataset misar_e18` 仍可使用，默认指向 `misar_e18_5_s1` 配置。
 
+## Y7_T（SM 替换 ATAC）常用命令
+
+### 全流程
+
+```bash
+python run_pipeline.py --dataset Y7_T
+```
+
+### 仅预处理 / 仅训练 / 仅评估（示例）
+
+```bash
+# preprocess
+python run_pipeline.py --dataset Y7_T --steps preprocess
+
+# train
+python run_pipeline.py --dataset Y7_T --steps train
+
+# evaluate
+python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+### 单阶段确定性启动（推荐）
+
+```bash
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_preprocess.py
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_train.py
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+
+python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --n-clusters 14
+```
+
 ## 范围评估（可选）
 
 当你需要一次性评估一段轮次（例如 1500-2000）时：
 
 ```bash
-python run_evaluate_range.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
+python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 1500 --end 3000 --step 100 --best-epoch 3000 --n-clusters 14
 ```
 
 小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：
@@ -188,8 +220,10 @@ python run_evaluate_range_p22.py --start 2500 --end 2600 --step 100
 - 根目录仍保留同名启动脚本（如 `run_pipeline.py`、`run_train.py`），它们会转发到 `scripts/` 下的实现。
 - 因此你现有命令无需修改。
 
-- `configs/config_human.yaml`
-- `configs/config_mouse.yaml`
+-- `configs/config_human.yaml`
+-- `configs/config_mouse.yaml`
+-- `configs/renal/config_renal_R114_T.yaml`
+-- `configs/renal/config_renal_Y7_T.yaml`
 - `configs/e11_0_s1/config_misar_e11_0_s1.yaml`
 - `configs/e11_0_s2/config_misar_e11_0_s2.yaml`
 - `configs/e13_5_s1/config_misar_e13_5_s1.yaml`

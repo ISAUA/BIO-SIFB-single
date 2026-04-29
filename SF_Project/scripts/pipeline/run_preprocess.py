@@ -17,6 +17,7 @@ _sanitize_thread_env()
 import argparse
 import logging
 import time
+import warnings
 import torch
 import yaml
 import numpy as np
@@ -32,9 +33,11 @@ from sf_model.preprocess.io import (
     read_10x_h5_multiome,
     add_spatial_info_csv,
     read_h5ad_rna_atac,
+    _ensure_spatial_from_obs,
 )
 from sf_model.preprocess.rna_process import process_rna_pipeline
 from sf_model.preprocess.atac_process import process_atac_pipeline, custom_tf_idf
+from sf_model.preprocess.sm_process import read_sm_h5ad, process_sm_pipeline, resolve_sm_path
 from sf_model.utils import build_spatial_graph, set_seed
 
 def load_config(config_path="configs/config_human.yaml"):
@@ -247,6 +250,11 @@ def main():
     reduce_cfg = params.get('reduce', {})
     n_freq_components = params.get('n_freq_components', config.get('model', {}).get('n_freq_components', None))
     use_rna_similarity_edge_weight = bool(params.get('use_rna_similarity_edge_weight', True))
+    sm_data_path = config.get('sm_data_path', None)
+    sm_pre_cfg = config.get('sm_preprocess', {}) or {}
+    sm_replace_atac = bool(sm_pre_cfg.get('replace_atac', False))
+    sm_adata = None
+    sm_feat_np = None
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -264,6 +272,9 @@ def main():
 
     fit_save_mode = (load_pca_dir is None) and (save_pca_dir is not None)
     load_align_mode = load_pca_dir is not None
+
+    if sm_replace_atac and load_align_mode:
+        raise ValueError("SM replace_atac mode is incompatible with --load-pca-dir.")
 
     if load_pca_dir is not None:
         logger.info(
@@ -299,6 +310,55 @@ def main():
     # 1) RNA+ATAC 双 h5ad
     # 2) MISAR: 10x h5 + spatial csv
     # 3) 旧版 mtx 输入
+    if sm_replace_atac:
+        if not sm_data_path or str(sm_data_path).strip() == "":
+            raise ValueError("sm_data_path is required when sm_preprocess.replace_atac is true.")
+
+        rna_h5ad = os.path.join(raw_dir, files.get('rna_h5ad', 'adata_RNA.h5ad'))
+        if not os.path.exists(rna_h5ad):
+            raise FileNotFoundError(f"RNA h5ad not found: {rna_h5ad}")
+
+        logger.info("Data loader: RNA h5ad + SM (replace ATAC)")
+        print(f"   -> Reading RNA from {rna_h5ad}...")
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Variable names are not unique. To make them unique, call `.var_names_make_unique`.",
+                category=UserWarning,
+            )
+            adata_rna = sc.read_h5ad(rna_h5ad)
+
+        adata_rna.obs_names = adata_rna.obs_names.astype(str)
+        adata_rna.var_names = adata_rna.var_names.astype(str)
+        adata_rna.var_names_make_unique()
+        adata_rna = _ensure_spatial_from_obs(adata_rna)
+        if 'spatial' not in adata_rna.obsm:
+            raise ValueError("RNA h5ad is missing spatial coordinates (obsm['spatial']).")
+
+        sm_data_path = resolve_sm_path(sm_data_path, raw_dir)
+        print(f"   -> Reading SM from {sm_data_path}...")
+        sm_adata = read_sm_h5ad(sm_data_path)
+
+        common_cells = adata_rna.obs_names.intersection(sm_adata.obs_names)
+        if len(common_cells) == 0:
+            raise ValueError("No overlapping barcodes between RNA and SM h5ad files.")
+        if len(common_cells) < adata_rna.n_obs or len(common_cells) < sm_adata.n_obs:
+            print(f"Warning: Keeping {len(common_cells)} intersected cells from RNA/SM h5ad files.")
+
+        adata_rna = adata_rna[common_cells, :].copy()
+        sm_adata = sm_adata[common_cells, :].copy()
+        sm_adata = sm_adata[adata_rna.obs_names, :].copy()
+        if 'spatial' not in sm_adata.obsm:
+            sm_adata.obsm['spatial'] = np.asarray(adata_rna.obsm['spatial'], dtype=np.float32)
+
+        adata_atac = sm_adata
+    # NOTE: fallback to standard RNA+ATAC loaders when not replacing ATAC.
+    # ---------------------------------------------------------------
+    # 1) paired h5ad
+    # 2) 10x multiome h5
+    # 3) mtx/tsv
+    # ---------------------------------------------------------------
+    # default_* used for standard loaders only
     default_rna_h5ad = os.path.join(raw_dir, "adata_RNA.h5ad")
     default_atac_h5ad = os.path.join(raw_dir, "adata_Peak.h5ad")
     has_pair_h5ad = (
@@ -306,7 +366,9 @@ def main():
         (os.path.exists(default_rna_h5ad) and os.path.exists(default_atac_h5ad))
     )
 
-    if has_pair_h5ad:
+    if sm_replace_atac:
+        pass
+    elif has_pair_h5ad:
         logger.info("Data loader: paired h5ad")
         rna_h5ad = os.path.join(raw_dir, files.get('rna_h5ad', 'adata_RNA.h5ad'))
         atac_h5ad = os.path.join(raw_dir, files.get('atac_h5ad', 'adata_Peak.h5ad'))
@@ -428,35 +490,38 @@ def main():
         )
 
         # --- ATAC ---
-        print("\n🧪 Processing ATAC...")
-        gtf_path = os.path.join(raw_dir, files['gtf'])
-        rna_genes = adata_rna.var_names.tolist()
+        if sm_replace_atac:
+            logger.info("ATAC preprocessing skipped (SM replace_atac enabled)")
+        else:
+            print("\n🧪 Processing ATAC...")
+            gtf_path = os.path.join(raw_dir, files['gtf'])
+            rna_genes = adata_rna.var_names.tolist()
 
-        adata_atac, _ = process_atac_pipeline(
-            adata_atac,
-            rna_genes=rna_genes,
-            gtf_path=gtf_path,
-            n_global=params['n_global_peaks'],
-            n_final=params['n_final_peaks'],
-            window=params['tss_window'],
-            min_cells=atac_min_cells,
-            target_sum=atac_target_sum,
-            tfidf_eps=tfidf_eps,
-        )
-
-        # S1 fit&save mode: persist selected feature lists for cross-domain hard alignment.
-        if fit_save_mode:
-            rna_vars_path = os.path.join(save_pca_dir, "rna_vars.txt")
-            atac_vars_path = os.path.join(save_pca_dir, "atac_vars.txt")
-            np.savetxt(rna_vars_path, np.asarray(adata_rna.var_names, dtype=str), fmt="%s")
-            np.savetxt(atac_vars_path, np.asarray(adata_atac.var_names, dtype=str), fmt="%s")
-            logger.info(
-                "Saved selected feature lists | RNA=%d -> %s | ATAC=%d -> %s",
-                adata_rna.n_vars,
-                rna_vars_path,
-                adata_atac.n_vars,
-                atac_vars_path,
+            adata_atac, _ = process_atac_pipeline(
+                adata_atac,
+                rna_genes=rna_genes,
+                gtf_path=gtf_path,
+                n_global=params['n_global_peaks'],
+                n_final=params['n_final_peaks'],
+                window=params['tss_window'],
+                min_cells=atac_min_cells,
+                target_sum=atac_target_sum,
+                tfidf_eps=tfidf_eps,
             )
+
+            # S1 fit&save mode: persist selected feature lists for cross-domain hard alignment.
+            if fit_save_mode:
+                rna_vars_path = os.path.join(save_pca_dir, "rna_vars.txt")
+                atac_vars_path = os.path.join(save_pca_dir, "atac_vars.txt")
+                np.savetxt(rna_vars_path, np.asarray(adata_rna.var_names, dtype=str), fmt="%s")
+                np.savetxt(atac_vars_path, np.asarray(adata_atac.var_names, dtype=str), fmt="%s")
+                logger.info(
+                    "Saved selected feature lists | RNA=%d -> %s | ATAC=%d -> %s",
+                    adata_rna.n_vars,
+                    rna_vars_path,
+                    adata_atac.n_vars,
+                    atac_vars_path,
+                )
 
     # 预处理后再做一次强制对齐：按 RNA 条码对 ATAC 取子集并重排。
     # 这一步可兜底处理任一模态在上游发生了细胞过滤的情况。
@@ -479,6 +544,68 @@ def main():
     logger.info("Aligned final cells: RNA=%d, ATAC=%d", adata_rna.n_obs, adata_atac.n_obs)
 
     # ==========================================
+    # Step 3.2: 代谢组 (SM) 预处理（可选）
+    # ==========================================
+    if sm_data_path:
+        if sm_adata is None:
+            sm_data_path = resolve_sm_path(sm_data_path, raw_dir)
+            print("\n🧪 Processing SM (metabolomics)...")
+            logger.info("SM preprocess: %s", sm_data_path)
+            sm_adata = read_sm_h5ad(sm_data_path)
+        else:
+            print("\n🧪 Processing SM (metabolomics)...")
+            logger.info("SM preprocess: reuse loaded AnnData")
+
+        sm_use_pca = bool(sm_pre_cfg.get('use_pca', False))
+        if sm_use_pca:
+            raise ValueError("sm_preprocess.use_pca must be False to bypass PCA.")
+
+        sm_moran_k_default = config.get('eval', {}).get('moran_k', params.get('knn_k', 6))
+        sm_n_top = sm_pre_cfg.get('n_top_metabolites', 500)
+        sm_n_top = None if sm_n_top is None else int(sm_n_top)
+        sm_pval = sm_pre_cfg.get('pval_threshold', 0.05)
+        sm_pval = 0.05 if sm_pval is None else float(sm_pval)
+        sm_moran_k = sm_pre_cfg.get('moran_k', sm_moran_k_default)
+        sm_moran_k = sm_moran_k_default if sm_moran_k is None else int(sm_moran_k)
+        sm_perms = sm_pre_cfg.get('moran_permutations', 0)
+        sm_perms = 0 if sm_perms is None else int(sm_perms)
+        sm_method = sm_pre_cfg.get('spatial_graph_method', 'knn') or 'knn'
+        sm_hvg_method = sm_pre_cfg.get('spatial_hvg_method', 'morans_i') or 'morans_i'
+        sm_adata = process_sm_pipeline(
+            sm_adata,
+            apply_log1p=bool(sm_pre_cfg.get('apply_log1p', True)),
+            spatial_hvg_method=sm_hvg_method,
+            n_top_metabolites=sm_n_top,
+            apply_scale=bool(sm_pre_cfg.get('apply_scale', True)),
+            pval_threshold=sm_pval,
+            drop_dead_spots=bool(sm_pre_cfg.get('drop_dead_spots', False)),
+            spatial_graph_method=sm_method,
+            moran_k=sm_moran_k,
+            radius=sm_pre_cfg.get('radius', None),
+            moran_permutations=sm_perms,
+        )
+        if sm_replace_atac:
+            if sm_adata.n_obs != adata_rna.n_obs or not np.array_equal(sm_adata.obs_names, adata_rna.obs_names):
+                common_cells = adata_rna.obs_names.intersection(sm_adata.obs_names)
+                if len(common_cells) == 0:
+                    raise ValueError("No overlapping cells between RNA and SM after preprocessing.")
+                if len(common_cells) < adata_rna.n_obs or len(common_cells) < sm_adata.n_obs:
+                    print(
+                        f"⚠️ Post-SM alignment: RNA={adata_rna.n_obs}, SM={sm_adata.n_obs}, "
+                        f"keeping intersection={len(common_cells)}"
+                    )
+                adata_rna = adata_rna[common_cells, :].copy()
+                sm_adata = sm_adata[common_cells, :].copy()
+                sm_adata = sm_adata[adata_rna.obs_names, :].copy()
+        sm_feat_np = np.asarray(sm_adata.X, dtype=np.float32)
+        print(f"   ✅ SM processed shape: {sm_feat_np.shape}")
+        logger.info("SM processed shape: %s", sm_feat_np.shape)
+        if sm_replace_atac:
+            adata_atac = sm_adata
+    else:
+        logger.info("SM preprocess skipped (no sm_data_path).")
+
+    # ==========================================
     # Step 3.5: 模态 PCA/SVD 降维（统一入模特征维度）
     # ==========================================
     rna_pca_dim = int(params.get('rna_pca_dim', 512))
@@ -494,15 +621,22 @@ def main():
         save_model_path=rna_model_save_path,
         load_model_path=rna_model_load_path,
     )
-    atac_feat_np = reduce_modality_features(
-        adata_atac.X,
-        atac_pca_dim,
-        seed,
-        "ATAC",
-        reduce_cfg=reduce_cfg,
-        save_model_path=atac_model_save_path,
-        load_model_path=atac_model_load_path,
-    )
+    if sm_replace_atac:
+        if sm_feat_np is None:
+            raise ValueError("SM features are missing; cannot replace ATAC input.")
+        atac_feat_np = np.asarray(sm_feat_np, dtype=np.float32)
+        print(f"   ✅ Using SM features as ATAC input: {atac_feat_np.shape}")
+        logger.info("Using SM features as ATAC input: %s", atac_feat_np.shape)
+    else:
+        atac_feat_np = reduce_modality_features(
+            adata_atac.X,
+            atac_pca_dim,
+            seed,
+            "ATAC",
+            reduce_cfg=reduce_cfg,
+            save_model_path=atac_model_save_path,
+            load_model_path=atac_model_load_path,
+        )
     print(f"   ✅ Reduced RNA shape: {rna_feat_np.shape}")
     print(f"   ✅ Reduced ATAC shape: {atac_feat_np.shape}")
     logger.info("Reduced shapes: RNA=%s, ATAC=%s", rna_feat_np.shape, atac_feat_np.shape)
@@ -606,6 +740,16 @@ def main():
     if ground_truth is not None:
         data_dict["ground_truth"] = ground_truth
         data_dict["ground_truth_key"] = gt_key
+
+    if sm_feat_np is not None and sm_adata is not None:
+        sm_feat = torch.FloatTensor(sm_feat_np)
+        data_dict["sm_feat"] = sm_feat
+        data_dict["sm_input_dim"] = int(sm_feat.shape[1])
+        data_dict["sm_var_names"] = np.asarray(sm_adata.var_names, dtype=str)
+        data_dict["sm_obs_names"] = np.asarray(sm_adata.obs_names, dtype=str)
+        if "spatial" in sm_adata.obsm:
+            sm_coords = np.asarray(sm_adata.obsm["spatial"], dtype=np.float32)
+            data_dict["sm_coords"] = torch.FloatTensor(sm_coords)
     
     torch.save(data_dict, save_path)
     print("✅ Preprocessing Complete!")

@@ -24,6 +24,7 @@ DATASET_CONFIG = {
     "misar_e18_5_s1": "configs/e18_5_s1/config_misar_e18_5_s1.yaml",
     "misar_e18_5_s2": "configs/e18_5_s2/config_misar_e18_5_s2.yaml",
     "misar_e18": "configs/e18_5_s1/config_misar_e18.yaml",
+    "simulation1": "configs/simulation/config_simulation1.yaml",
 }
 
 ALL_STEPS = ["preprocess", "train", "evaluate"]
@@ -39,6 +40,7 @@ def parse_args():
     )
     parser.add_argument("--checkpoint", default=None, help="评估阶段使用的 checkpoint key 或文件名，可选")
     parser.add_argument("--n-clusters", type=int, default=None, help="评估阶段 mclust 聚类簇数，可选")
+    parser.add_argument("--resolution", type=float, default=None, help="评估阶段 Leiden 分辨率，可选")
     return parser.parse_args()
 
 
@@ -146,6 +148,8 @@ def main():
             eval_cmd.extend(["--checkpoint", args.checkpoint])
         if args.n_clusters is not None:
             eval_cmd.extend(["--n-clusters", str(args.n_clusters)])
+        if args.resolution is not None:
+            eval_cmd.extend(["--resolution", str(args.resolution)])
         steps.append(("Evaluate", eval_cmd))
 
     if not steps:

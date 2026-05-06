@@ -57,6 +57,7 @@ def parse_args():
     parser.add_argument("--step", type=int, default=100, help="Epoch step")
     parser.add_argument("--best-epoch", type=int, default=2000, help="Use best checkpoint when epoch equals this value")
     parser.add_argument("--n-clusters", type=int, default=None, help="Number of clusters for mclust (override config)")
+    parser.add_argument("--resolution", type=float, default=None, help="Leiden resolution (used for metabolomics eval)")
     return parser.parse_args()
 
 
@@ -107,6 +108,18 @@ def ensure_r_runtime_available():
         current_path = os.environ.get("PATH", "")
         if py_bin not in current_path.split(":"):
             os.environ["PATH"] = f"{py_bin}:{current_path}" if current_path else py_bin
+
+
+def resolve_cluster_method(config, eval_cfg):
+    method = str(eval_cfg.get("cluster_method", "auto")).strip().lower()
+    if method in {"mclust", "leiden"}:
+        return method
+
+    sm_data_path = str(config.get("sm_data_path", "")).strip()
+    sm_preprocess = config.get("sm_preprocess", {}) or {}
+    if sm_data_path or bool(sm_preprocess.get("replace_atac", False)):
+        return "leiden"
+    return "mclust"
 
 
 def extract_mclust_labels(res):
@@ -211,6 +224,8 @@ def visualize_and_save(
     save_dir,
     n_clusters=7,
     mclust_pca_dim=20,
+    cluster_method="mclust",
+    resolution=0.9,
     epoch_label=None,
     output_suffix=None,
     ground_truth=None,
@@ -233,30 +248,37 @@ def visualize_and_save(
 
     sc.pp.neighbors(adata, use_rep="X", random_state=int(seed))
     sc.tl.umap(adata, random_state=int(seed))
+    cluster_method = str(cluster_method).strip().lower()
+    if cluster_method not in {"mclust", "leiden"}:
+        raise ValueError(f"Unsupported cluster_method={cluster_method}. Use mclust or leiden.")
 
-    ensure_r_runtime_available()
-    import rpy2.robjects as robjects
-    import rpy2.robjects.numpy2ri
+    if cluster_method == "leiden":
+        adata.obs["cluster"] = None
+        sc.tl.leiden(adata, resolution=float(resolution), key_added="cluster", random_state=int(seed))
+    else:
+        ensure_r_runtime_available()
+        import rpy2.robjects as robjects
+        import rpy2.robjects.numpy2ri
 
-    rpy2.robjects.numpy2ri.activate()
-    robjects.r["set.seed"](int(seed))
-    robjects.r('suppressPackageStartupMessages(library(mclust))')
-    rmclust = robjects.r["Mclust"]
+        rpy2.robjects.numpy2ri.activate()
+        robjects.r["set.seed"](int(seed))
+        robjects.r('suppressPackageStartupMessages(library(mclust))')
+        rmclust = robjects.r["Mclust"]
 
-    # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
-    pca_target_dim = max(1, int(mclust_pca_dim))
-    pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
-    pca_model = PCA(n_components=pca_dim, random_state=int(seed))
-    z_pca = pca_model.fit_transform(z_final)
+        # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
+        pca_target_dim = max(1, int(mclust_pca_dim))
+        pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
+        pca_model = PCA(n_components=pca_dim, random_state=int(seed))
+        z_pca = pca_model.fit_transform(z_final)
 
-    res = rmclust(
-        rpy2.robjects.numpy2ri.numpy2rpy(z_pca),
-        int(n_clusters),
-        "EEE",
-        verbose=False,
-    )
-    mclust_res = extract_mclust_labels(res)
-    adata.obs["cluster"] = mclust_res
+        res = rmclust(
+            rpy2.robjects.numpy2ri.numpy2rpy(z_pca),
+            int(n_clusters),
+            "EEE",
+            verbose=False,
+        )
+        mclust_res = extract_mclust_labels(res)
+        adata.obs["cluster"] = mclust_res
 
     adata.obs["cluster"] = adata.obs["cluster"].astype(int).astype(str).astype("category")
     cluster_list = sorted(adata.obs["cluster"].unique(), key=lambda x: int(x))
@@ -305,9 +327,9 @@ def visualize_and_save(
                 f" | HOM: {cluster_scores['HOM']:.4f}"
             )
     except Exception as e:
-        moran_title_str = " | Moran's I Error"
+        moran_title_str = " | Moran's I skipped"
         if logger is not None:
-            logger.warning("Moran's I computation failed for %s: %s", output_suffix or "default", str(e))
+            logger.warning("Moran's I computation skipped for %s: %s", output_suffix or "default", str(e))
 
     plot_cfg = plot_cfg or {}
     panel_size = plot_cfg.get("panel_size", [6, 6])
@@ -450,8 +472,10 @@ def main():
     logger.info("[Range Evaluate] Started. epochs=%s", epochs)
 
     n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get("n_clusters", 7))
+    cluster_method = resolve_cluster_method(config, eval_cfg)
     compute_gt_metrics = bool(eval_cfg.get("compute_gt_metrics", True))
     mclust_pca_dim = int(eval_cfg.get("mclust_pca_dim", 20))
+    resolution = float(args.resolution if args.resolution is not None else eval_cfg.get("resolution", 0.9))
     moran_k = int(eval_cfg.get("moran_k", 6))
     plot_cfg = eval_cfg.get("plotting", {})
 
@@ -488,6 +512,7 @@ def main():
     config["model"]["rna_in_dim"] = rna_dim
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
     model.eval()
+    logger.info("Clustering method: %s", cluster_method)
 
     success = 0
     failed = 0
@@ -520,6 +545,8 @@ def main():
             save_dir,
             n_clusters=n_clusters,
             mclust_pca_dim=mclust_pca_dim,
+            cluster_method=cluster_method,
+            resolution=resolution,
             epoch_label=epoch_label,
             output_suffix=suffix,
             ground_truth=ground_truth,

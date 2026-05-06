@@ -54,6 +54,7 @@ def parse_args():
     # 可在 CLI 覆盖 checkpoint key；若不提供则采用 config 中的 eval.checkpoint
     parser.add_argument("--checkpoint", default=None, help="Checkpoint key or filename; defaults to config eval.checkpoint")
     parser.add_argument("--n-clusters", type=int, default=None, help="Number of clusters for mclust (override config)")
+    parser.add_argument("--resolution", type=float, default=None, help="Leiden resolution (used for metabolomics eval)")
     return parser.parse_args()
 
 
@@ -104,6 +105,18 @@ def ensure_r_runtime_available():
         current_path = os.environ.get("PATH", "")
         if py_bin not in current_path.split(":"):
             os.environ["PATH"] = f"{py_bin}:{current_path}" if current_path else py_bin
+
+
+def resolve_cluster_method(config, eval_cfg):
+    method = str(eval_cfg.get("cluster_method", "auto")).strip().lower()
+    if method in {"mclust", "leiden"}:
+        return method
+
+    sm_data_path = str(config.get("sm_data_path", "")).strip()
+    sm_preprocess = config.get("sm_preprocess", {}) or {}
+    if sm_data_path or bool(sm_preprocess.get("replace_atac", False)):
+        return "leiden"
+    return "mclust"
 
 
 def extract_mclust_labels(res):
@@ -227,6 +240,8 @@ def visualize_and_save(
     save_dir,
     n_clusters=7,
     mclust_pca_dim=20,
+    cluster_method="mclust",
+    resolution=0.9,
     epoch_label=None,
     ground_truth=None,
     logger=None,
@@ -256,30 +271,37 @@ def visualize_and_save(
     # 2. 基础分析流程 (Neighbors -> UMAP -> Clustering)
     sc.pp.neighbors(adata, use_rep='X', random_state=int(seed))
     sc.tl.umap(adata, random_state=int(seed))
+    cluster_method = str(cluster_method).strip().lower()
+    if cluster_method not in {"mclust", "leiden"}:
+        raise ValueError(f"Unsupported cluster_method={cluster_method}. Use mclust or leiden.")
 
-    ensure_r_runtime_available()
-    import rpy2.robjects as robjects
-    import rpy2.robjects.numpy2ri
+    if cluster_method == "leiden":
+        adata.obs["cluster"] = None
+        sc.tl.leiden(adata, resolution=float(resolution), key_added="cluster", random_state=int(seed))
+    else:
+        ensure_r_runtime_available()
+        import rpy2.robjects as robjects
+        import rpy2.robjects.numpy2ri
 
-    rpy2.robjects.numpy2ri.activate()
-    robjects.r['set.seed'](int(seed))
-    robjects.r('suppressPackageStartupMessages(library(mclust))')
-    rmclust = robjects.r['Mclust']
+        rpy2.robjects.numpy2ri.activate()
+        robjects.r['set.seed'](int(seed))
+        robjects.r('suppressPackageStartupMessages(library(mclust))')
+        rmclust = robjects.r['Mclust']
 
-    # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
-    pca_target_dim = max(1, int(mclust_pca_dim))
-    pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
-    pca_model = PCA(n_components=pca_dim, random_state=int(seed))
-    z_pca = pca_model.fit_transform(z_final)
+        # 使用 PCA 将高维特征降维以加速 mclust 计算（维度由配置控制）
+        pca_target_dim = max(1, int(mclust_pca_dim))
+        pca_dim = min(pca_target_dim, z_final.shape[1], z_final.shape[0])
+        pca_model = PCA(n_components=pca_dim, random_state=int(seed))
+        z_pca = pca_model.fit_transform(z_final)
 
-    res = rmclust(
-        rpy2.robjects.numpy2ri.numpy2rpy(z_pca),
-        int(n_clusters),
-        'EEE',
-        verbose=False,
-    )
-    mclust_res = extract_mclust_labels(res)
-    adata.obs['cluster'] = mclust_res
+        res = rmclust(
+            rpy2.robjects.numpy2ri.numpy2rpy(z_pca),
+            int(n_clusters),
+            'EEE',
+            verbose=False,
+        )
+        mclust_res = extract_mclust_labels(res)
+        adata.obs['cluster'] = mclust_res
 
     # 强制聚类标签为 category，确保 Scanpy 使用离散类别配色。
     adata.obs['cluster'] = adata.obs['cluster'].astype(int).astype(str).astype('category')
@@ -297,14 +319,14 @@ def visualize_and_save(
     try:
         # 评估视角 1：连续隐特征 z_final 的平均空间自相关性
         mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
-        
+
         # 评估视角 2：离散聚类标签的空间连贯性
         cluster_labels = adata.obs['cluster'].values.astype(int)
         # mclust labels are often 1-based; use categorical codes to avoid adding an extra all-zero column.
         num_clusters = int(np.unique(cluster_labels).shape[0])
         one_hot_clusters = np.eye(num_clusters)[pd.Categorical(cluster_labels).codes]
         mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
-        
+
         moran_title_str = f" | Latent Moran's I: {mi_latent_avg:.4f} | Cluster Moran's I: {mi_cluster_avg:.4f}"
 
         cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
@@ -316,9 +338,9 @@ def visualize_and_save(
                 f" | HOM: {cluster_scores['HOM']:.4f}"
             )
     except Exception as e:
-        moran_title_str = " | Moran's I Error"
+        moran_title_str = " | Moran's I skipped"
         if logger is not None:
-            logger.warning("Moran's I computation failed: %s", str(e))
+            logger.warning("Moran's I computation skipped for %s: %s", checkpoint_name or "default", str(e))
     # ==============================================================================
 
     # 3. 绘图 (UMAP + Spatial)
@@ -502,8 +524,10 @@ def main():
     eval_cfg = config.get('eval', {})
     plot_cfg = eval_cfg.get('plotting', {})
     compute_gt_metrics = bool(eval_cfg.get('compute_gt_metrics', True))
+    cluster_method = resolve_cluster_method(config, eval_cfg)
     n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get('n_clusters', 7))
     mclust_pca_dim = int(eval_cfg.get('mclust_pca_dim', 20))
+    resolution = float(args.resolution if args.resolution is not None else eval_cfg.get('resolution', 0.9))
     moran_k = int(eval_cfg.get('moran_k', 6))
     ckpt_key = args.checkpoint or eval_cfg.get('checkpoint', 'best')
     ckpt_map = eval_cfg.get('checkpoints', {})
@@ -521,6 +545,7 @@ def main():
         return
 
     logger.info("Loading checkpoint: %s", ckpt_name)
+    logger.info("Clustering method: %s", cluster_method)
     # 加载参数 (处理可能的 key 不匹配问题)
     state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
     model.load_state_dict(state_dict, strict=False)
@@ -544,6 +569,8 @@ def main():
         save_dir, 
         n_clusters=n_clusters,
         mclust_pca_dim=mclust_pca_dim,
+        cluster_method=cluster_method,
+        resolution=resolution,
         epoch_label=epoch_label,
         ground_truth=ground_truth,
         logger=logger,

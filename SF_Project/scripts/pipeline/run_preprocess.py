@@ -37,6 +37,7 @@ from sf_model.preprocess.io import (
 )
 from sf_model.preprocess.rna_process import process_rna_pipeline
 from sf_model.preprocess.atac_process import process_atac_pipeline, custom_tf_idf
+from sf_model.preprocess.adt_process import process_adt_pipeline, read_adt_h5ad, resolve_adt_path
 from sf_model.preprocess.sm_process import read_sm_h5ad, process_sm_pipeline, resolve_sm_path
 from sf_model.utils import build_spatial_graph, set_seed
 
@@ -250,11 +251,17 @@ def main():
     reduce_cfg = params.get('reduce', {})
     n_freq_components = params.get('n_freq_components', config.get('model', {}).get('n_freq_components', None))
     use_rna_similarity_edge_weight = bool(params.get('use_rna_similarity_edge_weight', True))
+    rna_use_pca = bool(params.get('rna_use_pca', True))
     sm_data_path = config.get('sm_data_path', None)
     sm_pre_cfg = config.get('sm_preprocess', {}) or {}
     sm_replace_atac = bool(sm_pre_cfg.get('replace_atac', False))
     sm_adata = None
     sm_feat_np = None
+    adt_pre_cfg = config.get('adt_preprocess', {}) or {}
+    use_adt = bool(adt_pre_cfg.get('use_adt', False))
+    adt_data_path = adt_pre_cfg.get('adt_data_path', None)
+    adt_apply_clr = bool(adt_pre_cfg.get('apply_clr', False))
+    adt_apply_scale = bool(adt_pre_cfg.get('apply_scale', False))
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -275,6 +282,10 @@ def main():
 
     if sm_replace_atac and load_align_mode:
         raise ValueError("SM replace_atac mode is incompatible with --load-pca-dir.")
+    if use_adt and sm_replace_atac:
+        raise ValueError("ADT mode is incompatible with sm_preprocess.replace_atac.")
+    if use_adt and load_align_mode:
+        raise ValueError("ADT mode is incompatible with --load-pca-dir (expects ATAC feature alignment).")
 
     if load_pca_dir is not None:
         logger.info(
@@ -310,7 +321,53 @@ def main():
     # 1) RNA+ATAC 双 h5ad
     # 2) MISAR: 10x h5 + spatial csv
     # 3) 旧版 mtx 输入
-    if sm_replace_atac:
+    if use_adt:
+        if not adt_data_path or str(adt_data_path).strip() == "":
+            raise ValueError("adt_preprocess.adt_data_path is required when use_adt is true.")
+
+        rna_h5ad = os.path.join(raw_dir, files.get('rna_h5ad', 'adata_RNA.h5ad'))
+        if os.path.exists(rna_h5ad):
+            logger.info("Data loader: RNA h5ad + ADT h5ad")
+            print(f"   -> Reading RNA from {rna_h5ad}...")
+            with warnings.catch_warnings():
+                warnings.filterwarnings(
+                    "ignore",
+                    message="Variable names are not unique. To make them unique, call `.var_names_make_unique`.",
+                    category=UserWarning,
+                )
+                adata_rna = sc.read_h5ad(rna_h5ad)
+            adata_rna.obs_names = adata_rna.obs_names.astype(str)
+            adata_rna.var_names = adata_rna.var_names.astype(str)
+            adata_rna.var_names_make_unique()
+            adata_rna = _ensure_spatial_from_obs(adata_rna)
+            if 'spatial' not in adata_rna.obsm:
+                raise ValueError("RNA h5ad is missing spatial coordinates (obsm['spatial']).")
+        else:
+            logger.info("Data loader: RNA mtx + ADT h5ad")
+            print(f"   -> Reading RNA from {files['rna_mtx']}...")
+            adata_rna = read_mtx_to_adata(
+                os.path.join(raw_dir, files['rna_mtx']),
+                os.path.join(raw_dir, files['rna_genes']),
+                os.path.join(raw_dir, files['rna_barcodes'])
+            )
+            adata_rna = add_spatial_info(adata_rna, os.path.join(raw_dir, files['spatial']))
+
+        adt_data_path = resolve_adt_path(adt_data_path, raw_dir)
+        print(f"   -> Reading ADT from {adt_data_path}...")
+        adata_atac = read_adt_h5ad(adt_data_path)
+
+        common_cells = adata_rna.obs_names.intersection(adata_atac.obs_names)
+        if len(common_cells) == 0:
+            raise ValueError("No overlapping barcodes between RNA and ADT h5ad files.")
+        if len(common_cells) < adata_rna.n_obs or len(common_cells) < adata_atac.n_obs:
+            print(f"Warning: Keeping {len(common_cells)} intersected cells from RNA/ADT h5ad files.")
+
+        adata_rna = adata_rna[common_cells, :].copy()
+        adata_atac = adata_atac[common_cells, :].copy()
+        adata_atac = adata_atac[adata_rna.obs_names, :].copy()
+        adata_atac.obsm['spatial'] = adata_rna.obsm['spatial'].copy()
+
+    elif sm_replace_atac:
         if not sm_data_path or str(sm_data_path).strip() == "":
             raise ValueError("sm_data_path is required when sm_preprocess.replace_atac is true.")
 
@@ -366,7 +423,9 @@ def main():
         (os.path.exists(default_rna_h5ad) and os.path.exists(default_atac_h5ad))
     )
 
-    if sm_replace_atac:
+    if use_adt:
+        pass
+    elif sm_replace_atac:
         pass
     elif has_pair_h5ad:
         logger.info("Data loader: paired h5ad")
@@ -400,7 +459,7 @@ def main():
             os.path.join(raw_dir, files['atac_barcodes'])
         )
 
-    # 模态对齐：将 RNA 细胞顺序应用到 ATAC，并同步空间坐标
+    # 模态对齐：将 RNA 细胞顺序应用到 ATAC/ADT，并同步空间坐标
     adata_atac = adata_atac[adata_rna.obs_names, :].copy()
     adata_atac.obsm['spatial'] = adata_rna.obsm['spatial'].copy()
 
@@ -489,8 +548,15 @@ def main():
             target_sum=rna_target_sum,
         )
 
-        # --- ATAC ---
-        if sm_replace_atac:
+        # --- ATAC / ADT ---
+        if use_adt:
+            print("\n🧪 Processing ADT...")
+            adata_atac = process_adt_pipeline(
+                adata_atac,
+                apply_clr=adt_apply_clr,
+                apply_scale=adt_apply_scale,
+            )
+        elif sm_replace_atac:
             logger.info("ATAC preprocessing skipped (SM replace_atac enabled)")
         else:
             print("\n🧪 Processing ATAC...")
@@ -557,8 +623,6 @@ def main():
             logger.info("SM preprocess: reuse loaded AnnData")
 
         sm_use_pca = bool(sm_pre_cfg.get('use_pca', False))
-        if sm_use_pca:
-            raise ValueError("sm_preprocess.use_pca must be False to bypass PCA.")
 
         sm_moran_k_default = config.get('eval', {}).get('moran_k', params.get('knn_k', 6))
         sm_n_top = sm_pre_cfg.get('n_top_metabolites', 500)
@@ -571,8 +635,10 @@ def main():
         sm_perms = 0 if sm_perms is None else int(sm_perms)
         sm_method = sm_pre_cfg.get('spatial_graph_method', 'knn') or 'knn'
         sm_hvg_method = sm_pre_cfg.get('spatial_hvg_method', 'morans_i') or 'morans_i'
+        sm_target_sum = float(sm_pre_cfg.get('target_sum', 1e4))
         sm_adata = process_sm_pipeline(
             sm_adata,
+            target_sum=sm_target_sum,
             apply_log1p=bool(sm_pre_cfg.get('apply_log1p', True)),
             spatial_hvg_method=sm_hvg_method,
             n_top_metabolites=sm_n_top,
@@ -612,21 +678,44 @@ def main():
     atac_pca_dim = int(params.get('atac_pca_dim', 512))
 
     print("\n📉 Reducing RNA/ATAC features before model input...")
-    rna_feat_np = reduce_modality_features(
-        adata_rna.X,
-        rna_pca_dim,
-        seed,
-        "RNA",
-        reduce_cfg=reduce_cfg,
-        save_model_path=rna_model_save_path,
-        load_model_path=rna_model_load_path,
-    )
-    if sm_replace_atac:
+    if rna_use_pca:
+        rna_feat_np = reduce_modality_features(
+            adata_rna.X,
+            rna_pca_dim,
+            seed,
+            "RNA",
+            reduce_cfg=reduce_cfg,
+            save_model_path=rna_model_save_path,
+            load_model_path=rna_model_load_path,
+        )
+    else:
+        print("   [RNA] PCA disabled by config; using full feature matrix.")
+        rna_feat_np = np.asarray(adata_rna.X, dtype=np.float32)
+        if not np.isfinite(rna_feat_np).all():
+            raise ValueError("RNA feature matrix contains NaN/Inf before model input.")
+    if use_adt:
+        atac_feat_np = np.asarray(adata_atac.X, dtype=np.float32)
+        print(f"   ✅ Using ADT features as ATAC input: {atac_feat_np.shape}")
+        logger.info("Using ADT features as ATAC input: %s", atac_feat_np.shape)
+    elif sm_replace_atac:
         if sm_feat_np is None:
             raise ValueError("SM features are missing; cannot replace ATAC input.")
-        atac_feat_np = np.asarray(sm_feat_np, dtype=np.float32)
-        print(f"   ✅ Using SM features as ATAC input: {atac_feat_np.shape}")
-        logger.info("Using SM features as ATAC input: %s", atac_feat_np.shape)
+        if sm_use_pca:
+            atac_feat_np = reduce_modality_features(
+                sm_feat_np,
+                atac_pca_dim,
+                seed,
+                "ATAC",
+                reduce_cfg=reduce_cfg,
+                save_model_path=atac_model_save_path,
+                load_model_path=atac_model_load_path,
+            )
+            print(f"   ✅ Using PCA-reduced SM features as ATAC input: {atac_feat_np.shape}")
+            logger.info("Using PCA-reduced SM features as ATAC input: %s", atac_feat_np.shape)
+        else:
+            atac_feat_np = np.asarray(sm_feat_np, dtype=np.float32)
+            print(f"   ✅ Using SM features as ATAC input: {atac_feat_np.shape}")
+            logger.info("Using SM features as ATAC input: %s", atac_feat_np.shape)
     else:
         atac_feat_np = reduce_modality_features(
             adata_atac.X,

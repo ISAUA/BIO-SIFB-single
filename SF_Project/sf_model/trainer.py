@@ -8,18 +8,30 @@ import math
 from tqdm.auto import trange
 from .utils import CLIPLoss
 
-# 1. 加权 MSE Loss 类 (保持不变)
+# # 1. 加权 MSE Loss 类 (保持不变)
+# class WeightedMSELoss(nn.Module):
+#     def __init__(self, pos_weight=10.0): 
+#         super().__init__()
+#         self.pos_weight = pos_weight
+
+#     def forward(self, pred, target):
+#         loss = (pred - target) ** 2
+#         # 生成权重: 如果 target > 0 (有真实信号)，给予高权重
+#         weights = torch.ones_like(target)
+#         weights[target > 0] = self.pos_weight 
+#         return (loss * weights).mean()
+
+# 1. 标准 MSE Loss 类 (修正 PCA 负值扭曲)
 class WeightedMSELoss(nn.Module):
     def __init__(self, pos_weight=10.0): 
         super().__init__()
-        self.pos_weight = pos_weight
+        # 废弃 pos_weight，因为在 PCA 稠密空间中不应进行正负半轴畸变加权
+        pass
 
     def forward(self, pred, target):
+        # 还原为标准的对称均方误差，保证连续特征流形的正确重构
         loss = (pred - target) ** 2
-        # 生成权重: 如果 target > 0 (有真实信号)，给予高权重
-        weights = torch.ones_like(target)
-        weights[target > 0] = self.pos_weight 
-        return (loss * weights).mean()
+        return loss.mean()
 
 class SFTrainer:
     def __init__(self, model, config, device='cuda'):
@@ -28,12 +40,16 @@ class SFTrainer:
         self.device = device
 
         self.train_cfg = config['train']
+        self.use_adt = bool(config.get('adt_preprocess', {}).get('use_adt', False))
         clip_temp = float(self.train_cfg.get('clip_temperature', 0.1))
         self.clip_criterion = CLIPLoss(temperature=clip_temp).to(device)
         
         # 初始化 Loss (保持不变，WeightedMSE 对于深层网络至关重要)
         pos_weight_rna = float(self.train_cfg.get('pos_weight_rna', 10.0))
-        pos_weight_atac = float(self.train_cfg.get('pos_weight_atac', 20.0))
+        if self.use_adt:
+            pos_weight_atac = float(self.train_cfg.get('pos_weight_adt', 1.0))
+        else:
+            pos_weight_atac = float(self.train_cfg.get('pos_weight_atac', 20.0))
         self.criterion_rna = WeightedMSELoss(pos_weight=pos_weight_rna).to(device)
         self.criterion_atac = WeightedMSELoss(pos_weight=pos_weight_atac).to(device)
 

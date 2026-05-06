@@ -49,6 +49,8 @@ class SpectralTransformerGate(nn.Module):
         self.q_proj = nn.Linear(self.dim, self.dim)
         self.k_proj = nn.Linear(self.dim, self.dim)
         self.v_proj = nn.Linear(self.dim, self.dim)
+        self.norm_rna = nn.LayerNorm(self.dim)
+        self.norm_atac = nn.LayerNorm(self.dim)
         self.gamma_eig = nn.Parameter(torch.tensor(1.0))
         self.debug_mode = bool(debug_mode)
         self.debug_epochs = set(int(e) for e in (debug_epochs or []))
@@ -84,6 +86,11 @@ class SpectralTransformerGate(nn.Module):
         self._forward_calls += 1
         run_debug_plot = self._should_run_debug()
         run_debug_stats = self.debug_mode
+
+        # Normalize spectral features before QKV projection to prevent N-scaling collapse.
+        hat_rna = self.norm_rna(hat_rna)
+        hat_atac = self.norm_atac(hat_atac)
+
         q = self.q_proj(hat_rna)
         k = self.k_proj(hat_atac)
         v = self.v_proj(hat_atac)
@@ -114,7 +121,9 @@ class SpectralTransformerGate(nn.Module):
             if evals.numel() != n_nodes:
                 raise ValueError(f"evals size mismatch: expected {n_nodes}, got {evals.numel()}")
             penalty_vec = -self.gamma_eig * torch.log1p(torch.clamp(evals, min=0.0))
-            eig_mask = torch.diag(penalty_vec)
+            # 修复代码：将高频惩罚作为行向量，广播到所有 Query (形状: [1, K])
+            # 这样不仅允许同频对角线对齐，还能正确抑制所有对高频 Key 的注意力
+            eig_mask = penalty_vec.unsqueeze(0)
 
         if run_debug_stats:
             with torch.no_grad():
@@ -218,8 +227,10 @@ class SymmetricSFIB(nn.Module):
 
         self.ino_layers = nn.ModuleList([INOUnit(self.dim) for _ in range(self.num_ino_layers)])
         self.spa_gate = nn.Sequential(
+            nn.LayerNorm(self.dim * 2),
             nn.Linear(self.dim * 2, self.dim),
             nn.GELU(),
+            nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.dim),
             nn.Sigmoid(),
         )

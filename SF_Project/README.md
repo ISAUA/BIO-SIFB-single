@@ -49,7 +49,7 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate
 
 ```bash
 python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_2100.pth --n-clusters 14
 ```
 
 ## e18.5 常用命令
@@ -161,7 +161,7 @@ python run_pipeline.py --dataset Y7_T --steps preprocess
 python run_pipeline.py --dataset Y7_T --steps train
 
 # evaluate
-python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9
 ```
 
 ### 单阶段确定性启动（推荐）
@@ -169,9 +169,9 @@ python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pt
 ```bash
 ./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_preprocess.py
 ./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_train.py
-./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --resolution 0.9
 
-python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --n-clusters 14
+python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --resolution 0.9
 ```
 
 ## 范围评估（可选）

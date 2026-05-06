@@ -7,9 +7,10 @@ project:                              # 项目级配置
 
 eval:                                 # 评估配置
   checkpoint: "best"                 # 默认评估 checkpoint key
-  n_clusters: 14                      # mclust 聚类簇数（点位数）
-  mclust_pca_dim: 20                  # mclust 前 PCA 维度
-  resolution: 0.9                     # Leiden 分辨率（mclust失败回退时使用）
+  cluster_method: "leiden"           # 代谢组评估固定使用 Leiden
+  n_clusters: 14                      # mclust 聚类簇数（仅非代谢组评估使用）
+  mclust_pca_dim: 20                  # mclust 前 PCA 维度（仅非代谢组评估使用）
+  resolution: 0.9                     # Leiden 分辨率
   moran_k: 6                          # Moran's I 邻居数
   plotting:                           # 绘图参数
     figure_dpi: 180                   # 绘图 DPI
@@ -56,10 +57,11 @@ data:                                 # 数据配置
 sm_data_path: "adata_SM_R114_T_with_labels.h5ad"  # 代谢组 h5ad 路径（相对 raw_path）
 sm_preprocess:
   replace_atac: true                 # 使用 SM 替换 ATAC 模态
+  target_sum: 1e4                    # TIC 归一化目标总和
   apply_log1p: true                  # 是否对强度执行 log1p
   spatial_hvg_method: "morans_i"    # 空间高变特征选择方法
   n_top_metabolites: 500             # SVMs 保留数量
-  apply_scale: true                  # 是否进行 Z-score
+  apply_scale: false                 # Z-score 关闭，保持非负对数表达量
   use_pca: false                     # 强制关闭 PCA
   pval_threshold: 0.05               # Moran's I 显著性阈值
   drop_dead_spots: false             # 是否移除全零点位

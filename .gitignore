@@ -17,6 +17,7 @@ venv/
 SF_Project/data/
 SF_Project/results/
 SF_Project/diagnostics/
+SPADDM/
 
 # ------------------------------
 # Large/binary outputs (do not upload)

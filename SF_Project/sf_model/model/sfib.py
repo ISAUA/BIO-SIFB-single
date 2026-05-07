@@ -88,8 +88,8 @@ class SpectralTransformerGate(nn.Module):
         run_debug_stats = self.debug_mode
 
         # Normalize spectral features before QKV projection to prevent N-scaling collapse.
-        hat_rna = self.norm_rna(hat_rna)
-        hat_atac = self.norm_atac(hat_atac)
+        # hat_rna = self.norm_rna(hat_rna)
+        # hat_atac = self.norm_atac(hat_atac)
 
         q = self.q_proj(hat_rna)
         k = self.k_proj(hat_atac)

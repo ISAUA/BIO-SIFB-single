@@ -6,7 +6,7 @@ project:                              # 项目级配置
   eval_dir: "./results/misar/misar_e18-5-s1/predictions/"   # 评估输出目录
 
 eval:                                 # 评估配置
-  checkpoint: "2100"                 # 默认评估 checkpoint key
+  checkpoint: "1500"                 # 默认评估 checkpoint key
   n_clusters: 14                      # mclust 聚类簇数（点位数）
   mclust_pca_dim: 20                  # mclust 前 PCA 维度
   resolution: 0.9                     # Leiden 分辨率（mclust失败回退时使用）
@@ -80,18 +80,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 3000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 2000               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 5.0                     # RNA 重构损失权重
   lambda_atac: 1.0                    # ATAC 重构损失权重
   lambda_clip: 0.5                    # 对比损失权重
   lambda_smooth: 1.0                 # 平滑损失权重
-  fade_start_epoch: 2000              # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                # CLIP 权重退火结束轮次
+  fade_start_epoch: 1000              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1500                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_atac: 20.0               # ATAC 正样本加权
   clip_temperature: 0.5               # CLIP 温度参数

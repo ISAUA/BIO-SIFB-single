@@ -1,103 +1,136 @@
-project:
-  name: "SF_MOUSE_BRAIN_P22_Analysis"
-  version: "1.0.0"
-  seed: 42
-  save_dir: "./results/mouse_brain_p22/checkpoints/"
-  eval_dir: "./results/mouse_brain_p22/predictions/"
+project:                              # 项目级配置
+  name: "SF_MOUSE_BRAIN_P22_Analysis"  # 项目名称，用于日志与输出标识
+  version: "1.0.0"                    # 配置版本号
+  seed: 42                             # 全局随机种子，保证尽可能可复现
+  save_dir: "./results/mouse_brain_p22/checkpoints/"  # 训练 checkpoint 保存目录
+  eval_dir: "./results/mouse_brain_p22/predictions/"  # 评估结果与图像输出目录
 
-eval:
-  checkpoint: "best"
-  n_clusters: 18
-  mclust_pca_dim: 20
-  resolution: 0.9
-  moran_k: 6
-  compute_gt_metrics: false
-  plotting:
-    figure_dpi: 180
-    figure_size: [14, 6]
-    panel_size: [6, 6]
-    umap_point_size: 60
-    spatial_point_size: 80
-    alpha: 1.0
-    legend_loc: "on data"
-    palette_mode: "high_contrast"
-  checkpoints:
-    best: "ckpt_best.pth"
-    final: "ckpt_300.pth"
+eval:                                  # 评估配置
+  checkpoint: "best"                  # 默认使用的 checkpoint key
+  n_clusters: 18                       # mclust/聚类目标簇数
+  mclust_pca_dim: 20                   # 聚类前 PCA 降维维度
+  resolution: 0.9                      # Leiden 分辨率，mclust 失败时回退可用
+  moran_k: 6                           # Moran's I 统计使用的邻居数
+  compute_gt_metrics: false            # 是否计算真值指标（mouse_p22 默认关闭）
+  plotting:                             # 绘图相关参数
+    figure_dpi: 180                    # 总图 DPI
+    figure_size: [14, 6]               # 总画布尺寸
+    panel_size: [6, 6]                 # 单个面板尺寸
+    umap_point_size: 60                # UMAP 点大小
+    spatial_point_size: 80             # 空间散点图点大小
+    alpha: 1.0                         # 绘图透明度
+    legend_loc: "on data"             # 图例位置
+    palette_mode: "high_contrast"     # 调色板模式
+  checkpoints:                          # checkpoint 映射表
+    best: "ckpt_best.pth"              # 最优模型文件名
+    final: "ckpt_300.pth"              # 最终轮次模型文件名
 
-data:
-  raw_path: "data/raw/mouse_brain_p22"
-  processed_path: "data/processed/mouse_brain_p22"
-  files:
-    rna_h5ad: "adata_RNA.h5ad"
-    atac_h5ad: "adata_Peaks.h5ad"
-    gtf: "../misar/gencode.vM23.annotation.gtf.gz"
-  parameters:
-    reduce:
-      mode: "cpu"
-      device: "auto"
-      q_offset: 8
-      niter: 3
-    n_top_genes: 3000
-    rna_pca_dim: 512
-    rna_min_cells: 3
-    rna_target_sum: 1e4
-    n_global_peaks: 50000
-    n_final_peaks: 30000
-    atac_pca_dim: 512
-    atac_min_cells: 50
-    atac_target_sum: 1e4
-    tfidf_eps: 1e-6
-    tss_window: 150000
-    knn_k: 9                              # 空间图 k 近邻
-    use_rna_similarity_edge_weight: false  # 是否启用基于 RNA 相似度的边权重
-    ground_truth_key: null
+data:                                  # 数据配置
+  raw_path: "data/raw/mouse_brain_p22"  # 原始数据目录
+  processed_path: "data/processed/mouse_brain_p22"  # 预处理输出目录
+  files:                                # 原始文件名定义
+    rna_h5ad: "adata_RNA.h5ad"         # RNA h5ad 文件名
+    atac_h5ad: "adata_Peaks.h5ad"      # ATAC h5ad 文件名
+    gtf: "../misar/gencode.vM23.annotation.gtf.gz"  # GTF 注释文件路径
+  parameters:                           # 预处理超参数
+    reduce:                             # 降维加速设置
+      mode: "cpu"                      # 降维模式：cpu / gpu_safe / gpu_full
+      device: "auto"                   # 降维设备：auto / cuda / cpu
+      q_offset: 8                       # 低秩分解冗余维度（q = n_components + q_offset）
+      niter: 3                          # 低秩迭代次数
+    n_top_genes: 3000                   # RNA 高变基因数
+    rna_pca_dim: 512                    # RNA PCA 降维维度
+    rna_min_cells: 3                   # RNA 基因最小细胞数过滤阈值
+    rna_target_sum: 1e4                 # RNA 归一化目标总和
+    n_global_peaks: 50000               # ATAC 初筛峰数
+    n_final_peaks: 30000                # ATAC 最终保留峰数
+    atac_pca_dim: 512                   # ATAC SVD/PCA 降维维度
+    atac_min_cells: 50                  # ATAC 峰最小细胞数过滤阈值
+    atac_target_sum: 1e4                # ATAC 归一化目标总和
+    tfidf_eps: 1e-6                     # TF-IDF 平滑项，防止除零
+    tss_window: 150000                  # TSS 上下游窗口大小（bp）
+    knn_k: 9                            # 空间图 KNN 邻居数
+    use_rna_similarity_edge_weight: false  # 是否用 RNA 特征相似度作为边权重
+    ground_truth_key: null              # 真值标签列名；mouse_p22 默认不提供
 
-model:
-  name: "SFNet"
-  n_freq_components: 2000
-  rna_in_dim: 3000
-  hidden_dim: 512
-  rna_n_heads: 4
-  rna_dropout: 0.1
-  atac_dropout: 0.1
-  n_heads: 4
-  dropout: 0.1
-  grid_size: 128
-  latent_dim: 50
-  sfib_dim: 128
-  sfib_ino_layers: 2
-  ino_use_edge_weight: true
-  ino_pre_smooth_enable: true
-  ino_pre_smooth_alpha: 0.5
-  proj_hidden_dim: 64
-  proj_output_dim: 64
-  rna_dec_hidden: 512
-  rna_dec_blocks: 0
-  atac_dec_hidden: 512
-  atac_dec_blocks: 0
-  sfib_debug_mode: false
-  model.sfib_debug_epochs: [1, 10, 20]
-  model.sfib_debug_every_n_epochs: 20
+model:                                 # 模型结构配置
+  name: "SFNet"                        # 模型名称
+  n_freq_components: 2000              # 频域成分数（与数据规模相关）
+  rna_in_dim: 3000                     # RNA 输入维度
+  hidden_dim: 512                      # 编码器主干隐藏维度
+  rna_n_heads: 4                      # RNA 分支注意力头数
+  rna_dropout: 0.1                    # RNA 分支 dropout
+  atac_dropout: 0.1                   # ATAC 分支 dropout
+  n_heads: 4                          # 通用注意力头数
+  dropout: 0.1                        # 通用 dropout
+  grid_size: 128                      # 网格尺寸（若使用）
+  latent_dim: 50                      # 潜变量维度
+  sfib_dim: 128                       # SFIB 特征维度
+  sfib_ino_layers: 2                  # SFIB 中 INO 层数
+  ino_use_edge_weight: true           # INO 是否使用边权重
+  ino_pre_smooth_enable: true         # INO 是否启用预平滑
+  ino_pre_smooth_alpha: 0.5           # 预平滑保真系数 alpha
+  proj_hidden_dim: 64                 # 对比投影头隐藏层维度
+  proj_output_dim: 64                 # 对比投影头输出维度
+  rna_dec_hidden: 512                 # RNA 解码器隐藏维度
+  rna_dec_blocks: 0                   # RNA 解码器残差块数
+  atac_dec_hidden: 512                # ATAC 解码器隐藏维度
+  atac_dec_blocks: 0                  # ATAC 解码器残差块数
+  sfib_debug_mode: false              # 是否开启 SFIB 调试输出
+  model.sfib_debug_epochs: [1, 10, 20]  # 指定调试输出轮次
+  model.sfib_debug_every_n_epochs: 20  # 调试输出间隔轮次
 
-train:
-  epochs: 3000
-  batch_size: 1
-  learning_rate: 1e-3
-  learning_rate_low: 1e-4
-  lr_switch_epoch: 2000
-  weight_decay: 1e-4
-  lambda_rna: 5.0
-  lambda_atac: 1.0
-  lambda_clip: 0.5
-  lambda_smooth: 15.0
-  fade_start_epoch: 2000
-  fade_end_epoch: 2500
-  pos_weight_rna: 10.0
-  pos_weight_atac: 20.0
-  clip_temperature: 0.5
-  save_every: 50
-  device: "cuda"
-  log_interval: 10
-  log_tail_blank_lines: 5
-  best_name: "ckpt_best.pth"
+train:                                 # 训练配置
+  epochs: 3000                         # 训练总轮数
+  batch_size: 1                        # 批大小（当前实现按全量训练）
+  learning_rate: 1e-3                  # 初始学习率
+  learning_rate_low: 1e-4              # 低学习率阶段的学习率
+  lr_switch_epoch: 2000                # 学习率切换轮次
+  weight_decay: 1e-4                   # 权重衰减系数
+  lambda_rna: 5.0                      # RNA 重构损失权重
+  lambda_atac: 1.0                     # ATAC 重构损失权重
+  lambda_clip: 0.5                     # 对比损失权重
+  lambda_smooth: 15.0                  # 空间平滑损失权重
+  fade_start_epoch: 2000               # CLIP 权重退火起始轮次
+  fade_end_epoch: 2500                 # CLIP 权重退火结束轮次
+  pos_weight_rna: 10.0                 # RNA 正样本加权
+  pos_weight_atac: 20.0                # ATAC 正样本加权
+  clip_temperature: 0.5                # CLIP 温度参数
+  save_every: 50                       # checkpoint 保存间隔
+  device: "cuda"                       # 训练设备
+  log_interval: 10                     # 日志打印间隔
+  log_tail_blank_lines: 5              # 训练结束后追加空行数
+  best_name: "ckpt_best.pth"           # 最优模型文件名
+
+translation:                           # 翻译专项配置（Stage 2 / Stage 3.5）
+  stage2:                              # 翻译器训练配置
+    data:                              # 训练数据来源
+      config: "configs/config_mouse_brain_p22.yaml"  # Stage2 训练用配置文件
+    backbone:                          # 冻结主干来源
+      config: "configs/config_mouse_brain_p22.yaml"  # 主干配置文件
+      checkpoint: "best"               # 主干 checkpoint key 或文件名
+    model:                             # 翻译器结构
+      n_blocks: 3                      # SF_Translator_R2A 残差 MLP 层数
+      hidden_dim: 128                  # 翻译器隐层维度（通常与 sfib_dim 一致）
+    train:                             # 翻译器训练超参数
+      epochs: 2000                     # Stage2 训练轮数
+      learning_rate: 1e-3              # 翻译器学习率
+      weight_decay: 1e-4               # 翻译器权重衰减
+      lambda_cosine: 1.0               # 潜变量余弦损失权重
+      lambda_mse: 1.0                  # 潜变量 MSE 损失权重
+      lambda_recon: 1.0                # WeightedMSE 重构损失权重
+    save:                              # 翻译器权重保存
+      save_every: 50                   # 间隔保存轮次
+      best_name: "translator_r2a_best.pth"  # 最优翻译器文件名
+
+  stage35:                             # 翻译评估配置
+    backbone:                          # 评估时冻结主干来源
+      config: "configs/config_mouse_brain_p22.yaml"  # 主干配置文件
+      checkpoint: "best"               # 主干 checkpoint key 或文件名
+    metrics:                           # 评估指标参数
+      n_clusters: 18                   # mclust 目标簇数
+      pca_dim: 20                      # mclust 前 PCA 维度
+      moran_k: 6                       # Moran's I 邻居数
+    io:                                # 评估输入输出配置
+      translator_checkpoint: null      # 可选翻译器路径；null 时使用 stage2.save.best_name
+      summary_csv_name: "translation_eval_stage35.csv"  # 评估汇总文件名

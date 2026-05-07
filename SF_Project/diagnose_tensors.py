@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import yaml
+import scanpy as sc
+from scipy.stats import pearsonr
 
 from sf_model.model.bio_sfinet import BioSFINet
 from sf_model.utils import set_seed
@@ -24,6 +26,7 @@ def parse_args():
     parser.add_argument(
         "--config",
         default="configs/e18_5_s1/config_misar_e18_5_s1.yaml",
+        # default="configs/renal/config_renal_Y7_T.yaml",
         help="Path to YAML config file",
     )
     parser.add_argument(
@@ -52,6 +55,14 @@ def parse_args():
         type=int,
         default=200000,
         help="Max number of points for scatter plot (default: 200000)",
+    )
+    # 新增：传入原始 ATAC 数据以计算 Depth
+    parser.add_argument(
+        "--atac-raw",
+        default="data/raw/misar/misar_e18-5-s1/adata_ATAC.h5ad",
+        help="Path to raw ATAC/SM h5ad file to compute sequencing depth",
+        # default="data/raw/renal/Y7_T/adata_SM_Y7_T_with_labels.h5ad",
+        # help="Path to raw ATAC/SM h5ad file to compute sequencing depth",
     )
     return parser.parse_args()
 
@@ -102,6 +113,62 @@ def tensor_sample(flat_tensor, max_samples, seed=42):
     g.manual_seed(int(seed))
     idx = torch.randperm(flat_tensor.numel(), generator=g, device=flat_tensor.device)[:max_samples]
     return flat_tensor.view(-1)[idx]
+
+
+def plot_and_calc_pc1_depth_corr(atac_feat, atac_raw_path, out_dir):
+    """新增：计算并绘制 ATAC Depth 与 SVD PC1 的相关性"""
+    if not atac_raw_path or not os.path.exists(atac_raw_path):
+        print("[Warn] --atac-raw is not provided or file not found. Skipping PC1-Depth correlation.")
+        return
+
+    print(f"\n[Info] Loading raw ATAC data from {atac_raw_path} to calculate depth...")
+    try:
+        adata_atac = sc.read_h5ad(atac_raw_path)
+        
+        # 兼容稀疏矩阵和稠密矩阵的总数计算
+        if hasattr(adata_atac.X, "sum"):
+            depth = adata_atac.X.sum(axis=1)
+        else:
+            depth = np.sum(adata_atac.X, axis=1)
+            
+        # 展平为一维 numpy 数组
+        if hasattr(depth, "A1"):
+            depth = depth.A1
+        else:
+            depth = np.array(depth).flatten()
+
+        pc1 = atac_feat[:, 0].detach().cpu().numpy()
+
+        # 严格检查细胞数量是否对齐（防止在预处理时过滤了细胞导致维度不匹配）
+        if len(depth) != len(pc1):
+            print(f"[Error] Dimension mismatch! Raw cells: {len(depth)}, Processed cells: {len(pc1)}.")
+            print("[Action] The cell counts do not match. Please calculate this correlation directly in `run_preprocess.py` right after the SVD step.")
+            return
+
+        # 计算皮尔逊相关系数
+        corr, pval = pearsonr(depth, pc1)
+        print("=" * 60)
+        print(f"[Result] Pearson Correlation (ATAC Depth vs PC1): {corr:.4f} (p-value: {pval:.2e})")
+        if abs(corr) > 0.8:
+            print("[Action] High correlation (>0.8) detected! SVD PC1 is dominated by sequencing depth and should be removed.")
+        else:
+            print("[Action] Correlation is acceptable. PC1 likely contains valid biological variance.")
+        print("=" * 60)
+
+        # 绘制散点图
+        plt.figure(figsize=(6, 5))
+        plt.scatter(depth, pc1, s=4, alpha=0.5, color="#d62728")
+        plt.xlabel("ATAC Total Counts (Sequencing Depth)")
+        plt.ylabel("ATAC SVD PC1 Value")
+        plt.title(f"Depth vs PC1 (Pearson r = {corr:.3f})")
+        plt.tight_layout()
+        out_path = os.path.join(out_dir, "atac_depth_vs_pc1.png")
+        plt.savefig(out_path, dpi=200)
+        plt.close()
+        print(f"[Plot] Saved Depth vs PC1 scatter: {out_path}\n")
+
+    except Exception as e:
+        print(f"[Error] Failed to calculate PC1-Depth correlation: {e}")
 
 
 def plot_scatter_negative_rna(rna_feat, rec_rna, out_dir, max_samples):
@@ -293,6 +360,9 @@ def main():
 
         outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
         z_fused, p_rna, p_atac, rec_rna, rec_atac, m_freq, gamma_spa, z_base, z_detail = outputs
+
+    # 新增的调用：传入 args.atac_raw 计算相关性
+    plot_and_calc_pc1_depth_corr(atac_feat, args.atac_raw, out_dir)
 
     plot_scatter_negative_rna(rna_feat, rec_rna, out_dir, args.scatter_sample)
     plot_zero_freq_explosion(hat_rna, out_dir)

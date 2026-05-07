@@ -33,7 +33,7 @@ data:                             # 数据配置
     rna_target_sum: 1e4               # RNA 归一化目标总和
     knn_k: 9                          # 空间图 k 近邻
     use_rna_similarity_edge_weight: true  # 是否启用基于 RNA 相似度的边权重
-    ground_truth_key: ground_truth      # 真实标签列名（无则留空）
+    ground_truth_key: "ground_truth"      # 真实标签列名（无则留空）
 
 adt_preprocess:                       # ADT 专用配置
   use_adt: true                       # 是否启用 ADT 通道
@@ -68,18 +68,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 3000                        # 训练轮数
+  epochs: 1000                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 2000               # 学习率切换轮次
+  lr_switch_epoch: 800               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 5.0                     # RNA 重构损失权重
   lambda_atac: 1.0                    # 第二模态重构损失权重
   lambda_clip: 0.5                    # 对比损失权重
   lambda_smooth: 1.0                  # 平滑损失权重
-  fade_start_epoch: 2000              # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                # CLIP 权重退火结束轮次
+  fade_start_epoch: 800              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1000                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_adt: 1.0                 # ADT 正样本加权
   clip_temperature: 0.5               # CLIP 温度参数

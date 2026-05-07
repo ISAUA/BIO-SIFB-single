@@ -25,6 +25,7 @@ import scanpy as sc
 import joblib
 from scipy import sparse
 from sklearn.decomposition import PCA, TruncatedSVD
+from sklearn.preprocessing import StandardScaler
 
 # 引入预处理模块
 from sf_model.preprocess.io import (
@@ -193,6 +194,11 @@ def reduce_modality_features(
             os.makedirs(os.path.dirname(save_model_path), exist_ok=True)
             joblib.dump(reducer, save_model_path)
             print(f"   [{modality_name}] Saved reducer: {save_model_path}")
+
+    # if modality_name.strip().lower() == "atac" and isinstance(reducer, TruncatedSVD):
+    #     if Z.shape[1] <= 1:
+    #         raise ValueError("ATAC SVD output has <=1 component; cannot drop PC1.")
+    #     Z = Z[:, 1:]
 
     dt = time.perf_counter() - t0
     print(f"   [{modality_name}] Dim reduction done in {dt:.2f}s")
@@ -726,6 +732,12 @@ def main():
             save_model_path=atac_model_save_path,
             load_model_path=atac_model_load_path,
         )
+        # if sparse.issparse(adata_atac.X):
+        #     scaler = StandardScaler()
+        #     atac_feat_np = scaler.fit_transform(atac_feat_np)
+        #     atac_feat_np = np.asarray(atac_feat_np, dtype=np.float32)
+        #     print("   ✅ StandardScaler applied to ATAC SVD features")
+        #     logger.info("StandardScaler applied to ATAC SVD features")
     print(f"   ✅ Reduced RNA shape: {rna_feat_np.shape}")
     print(f"   ✅ Reduced ATAC shape: {atac_feat_np.shape}")
     logger.info("Reduced shapes: RNA=%s, ATAC=%s", rna_feat_np.shape, atac_feat_np.shape)

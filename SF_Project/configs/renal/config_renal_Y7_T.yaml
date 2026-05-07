@@ -23,7 +23,7 @@ eval:                                 # 评估配置
     palette_mode: "high_contrast"     # 调色板模式
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
-    final: "ckpt_300.pth"            # 最终/指定轮次 checkpoint 文件名
+    final: "ckpt_1500.pth"            # 最终/指定轮次 checkpoint 文件名
 
 data:                                 # 数据配置
   raw_path: "data/raw/renal/Y7_T"          # 原始数据目录（Y7_T 子文件夹）
@@ -92,18 +92,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 2000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 1500               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 10.0                     # RNA 重构损失权重
   lambda_atac: 10.0                    # 第二模态重构损失权重（SM 替换 ATAC）
   lambda_clip: 0.5                    # 对比损失权重
   lambda_smooth: 0                  # 平滑损失权重
-  fade_start_epoch: 1500              # CLIP 权重退火起始轮次
-  fade_end_epoch: 1800                # CLIP 权重退火结束轮次
+  fade_start_epoch: 1000              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1500                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_atac: 10.0               # 第二模态正样本加权（SM 替换 ATAC）
   clip_temperature: 0.5               # CLIP 温度参数

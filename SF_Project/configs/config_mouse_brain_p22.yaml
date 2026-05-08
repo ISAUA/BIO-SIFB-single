@@ -6,7 +6,7 @@ project:                              # 项目级配置
   eval_dir: "./results/mouse_brain_p22/predictions/"  # 评估结果与图像输出目录
 
 eval:                                  # 评估配置
-  checkpoint: "best"                  # 默认使用的 checkpoint key
+  checkpoint: "1500"                  # 默认使用的 checkpoint key
   n_clusters: 18                       # mclust/聚类目标簇数
   mclust_pca_dim: 20                   # 聚类前 PCA 降维维度
   resolution: 0.9                      # Leiden 分辨率，mclust 失败时回退可用
@@ -55,7 +55,7 @@ data:                                  # 数据配置
 
 model:                                 # 模型结构配置
   name: "SFNet"                        # 模型名称
-  n_freq_components: 2000              # 频域成分数（与数据规模相关）
+  n_freq_components: 3000              # 频域成分数（与数据规模相关）
   rna_in_dim: 3000                     # RNA 输入维度
   hidden_dim: 512                      # 编码器主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
@@ -73,26 +73,26 @@ model:                                 # 模型结构配置
   proj_hidden_dim: 64                 # 对比投影头隐藏层维度
   proj_output_dim: 64                 # 对比投影头输出维度
   rna_dec_hidden: 512                 # RNA 解码器隐藏维度
-  rna_dec_blocks: 0                   # RNA 解码器残差块数
+  rna_dec_blocks: 1                   # RNA 解码器残差块数
   atac_dec_hidden: 512                # ATAC 解码器隐藏维度
-  atac_dec_blocks: 0                  # ATAC 解码器残差块数
+  atac_dec_blocks: 1                  # ATAC 解码器残差块数
   sfib_debug_mode: false              # 是否开启 SFIB 调试输出
   model.sfib_debug_epochs: [1, 10, 20]  # 指定调试输出轮次
   model.sfib_debug_every_n_epochs: 20  # 调试输出间隔轮次
 
 train:                                 # 训练配置
-  epochs: 3000                         # 训练总轮数
+  epochs: 2000                         # 训练总轮数
   batch_size: 1                        # 批大小（当前实现按全量训练）
   learning_rate: 1e-3                  # 初始学习率
   learning_rate_low: 1e-4              # 低学习率阶段的学习率
-  lr_switch_epoch: 2000                # 学习率切换轮次
+  lr_switch_epoch: 1500                # 学习率切换轮次
   weight_decay: 1e-4                   # 权重衰减系数
   lambda_rna: 5.0                      # RNA 重构损失权重
-  lambda_atac: 1.0                     # ATAC 重构损失权重
+  lambda_atac: 5.0                     # ATAC 重构损失权重
   lambda_clip: 0.5                     # 对比损失权重
-  lambda_smooth: 15.0                  # 空间平滑损失权重
-  fade_start_epoch: 2000               # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                 # CLIP 权重退火结束轮次
+  lambda_smooth: 0.5                  # 空间平滑损失权重
+  fade_start_epoch: 1500               # CLIP 权重退火起始轮次
+  fade_end_epoch: 2000                 # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                 # RNA 正样本加权
   pos_weight_atac: 20.0                # ATAC 正样本加权
   clip_temperature: 0.5                # CLIP 温度参数

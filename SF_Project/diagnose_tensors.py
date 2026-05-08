@@ -25,7 +25,8 @@ def parse_args():
     parser = argparse.ArgumentParser(description="Diagnose BioSFINet intermediate tensors")
     parser.add_argument(
         "--config",
-        default="configs/e18_5_s1/config_misar_e18_5_s1.yaml",
+        default="configs/config_mouse_brain_p22.yaml",
+        # default="configs/e18_5_s1/config_misar_e18_5_s1.yaml",
         # default="configs/renal/config_renal_Y7_T.yaml",
         help="Path to YAML config file",
     )
@@ -59,10 +60,8 @@ def parse_args():
     # 新增：传入原始 ATAC 数据以计算 Depth
     parser.add_argument(
         "--atac-raw",
-        default="data/raw/misar/misar_e18-5-s1/adata_ATAC.h5ad",
-        help="Path to raw ATAC/SM h5ad file to compute sequencing depth",
-        # default="data/raw/renal/Y7_T/adata_SM_Y7_T_with_labels.h5ad",
-        # help="Path to raw ATAC/SM h5ad file to compute sequencing depth",
+        default=None,
+        help="Path to raw ATAC/SM h5ad file to compute sequencing depth; default: derive from config",
     )
     return parser.parse_args()
 
@@ -75,6 +74,41 @@ def resolve_device(device_arg):
     if device_arg:
         return torch.device(device_arg)
     return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+
+def resolve_config_path(config, relative_path):
+    if not relative_path:
+        return None
+    if os.path.isabs(relative_path):
+        return relative_path
+
+    raw_root = config.get("data", {}).get("raw_path")
+    if raw_root:
+        candidate = os.path.join(raw_root, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+
+    return relative_path
+
+
+def resolve_atac_raw_path(config, cli_path):
+    if cli_path:
+        return cli_path
+
+    data_cfg = config.get("data", {})
+    raw_root = data_cfg.get("raw_path", "")
+    files_cfg = data_cfg.get("files", {})
+    atac_name = files_cfg.get("atac_h5ad")
+
+    if raw_root and atac_name:
+        candidate = os.path.join(raw_root, atac_name)
+        if os.path.exists(candidate):
+            return candidate
+
+    if raw_root:
+        return raw_root
+
+    return None
 
 
 def load_state_dict_shape_compatible(model, state_dict):
@@ -217,8 +251,17 @@ def plot_zero_freq_explosion(hat_rna, out_dir):
 
 def plot_attention_heatmap(m_freq, out_dir):
     attn = m_freq.detach().cpu().float().numpy()
-    diag_mean = float(np.diag(attn).mean())
-    off_diag = attn[~np.eye(attn.shape[0], dtype=bool)]
+    if attn.ndim != 2:
+        raise ValueError(f"Expected 2D m_freq tensor, got shape {attn.shape}")
+
+    diag_len = min(attn.shape[0], attn.shape[1])
+    diag_vals = attn[np.arange(diag_len), np.arange(diag_len)] if diag_len > 0 else np.array([])
+    diag_mean = float(diag_vals.mean()) if diag_vals.size > 0 else float("nan")
+
+    off_mask = np.ones(attn.shape, dtype=bool)
+    if diag_len > 0:
+        off_mask[np.arange(diag_len), np.arange(diag_len)] = False
+    off_diag = attn[off_mask]
     off_mean = float(off_diag.mean()) if off_diag.size > 0 else float("nan")
 
     plt.figure(figsize=(7, 6))
@@ -293,6 +336,10 @@ def main():
     config = load_config(args.config)
     set_seed(config.get("project", {}).get("seed", 42))
 
+    atac_raw_path = resolve_atac_raw_path(config, args.atac_raw)
+    if atac_raw_path and not os.path.isabs(atac_raw_path):
+        atac_raw_path = resolve_config_path(config, atac_raw_path)
+
     device = resolve_device(args.device)
     print(f"[Info] Device: {device}")
 
@@ -361,8 +408,8 @@ def main():
         outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
         z_fused, p_rna, p_atac, rec_rna, rec_atac, m_freq, gamma_spa, z_base, z_detail = outputs
 
-    # 新增的调用：传入 args.atac_raw 计算相关性
-    plot_and_calc_pc1_depth_corr(atac_feat, args.atac_raw, out_dir)
+    # 优先使用配置中的 raw ATAC 路径；如未命中再跳过相关性检查
+    plot_and_calc_pc1_depth_corr(atac_feat, atac_raw_path, out_dir)
 
     plot_scatter_negative_rna(rna_feat, rec_rna, out_dir, args.scatter_sample)
     plot_zero_freq_explosion(hat_rna, out_dir)

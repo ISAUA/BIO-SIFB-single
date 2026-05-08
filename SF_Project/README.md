@@ -179,7 +179,7 @@ python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --sta
 当你需要一次性评估一段轮次（例如 1500-2000）时：
 
 ```bash
-python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 800 --end 1500 --step 100 --best-epoch 1500 --n-clusters 14
+python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
 ```
 
 小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：

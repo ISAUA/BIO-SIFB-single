@@ -35,7 +35,7 @@ class INOUnit(nn.Module):
 
 
 class SpectralTransformerGate(nn.Module):
-    """Cross-attention in spectral domain with Laplacian-eigenvalue diagonal penalty."""
+    """Adaptive frequency gating in spectral domain."""
 
     def __init__(
         self,
@@ -46,12 +46,13 @@ class SpectralTransformerGate(nn.Module):
     ):
         super().__init__()
         self.dim = int(dim)
-        self.q_proj = nn.Linear(self.dim, self.dim)
-        self.k_proj = nn.Linear(self.dim, self.dim)
-        self.v_proj = nn.Linear(self.dim, self.dim)
         self.norm_rna = nn.LayerNorm(self.dim)
         self.norm_atac = nn.LayerNorm(self.dim)
-        self.gamma_eig = nn.Parameter(torch.tensor(1.0))
+        self.gating_mlp = nn.Sequential(
+            nn.Linear(self.dim * 2, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+        )
         self.debug_mode = bool(debug_mode)
         self.debug_epochs = set(int(e) for e in (debug_epochs or []))
         self.debug_every_n_epochs = int(debug_every_n_epochs)
@@ -87,87 +88,38 @@ class SpectralTransformerGate(nn.Module):
         run_debug_plot = self._should_run_debug()
         run_debug_stats = self.debug_mode
 
-        # Normalize spectral features before QKV projection to prevent N-scaling collapse.
-        # hat_rna = self.norm_rna(hat_rna)
-        # hat_atac = self.norm_atac(hat_atac)
-
-        q = self.q_proj(hat_rna)
-        k = self.k_proj(hat_atac)
-        v = self.v_proj(hat_atac)
+        # Normalize spectral features before adaptive gating to prevent scale collapse.
+        norm_rna_out = self.norm_rna(hat_rna)
+        norm_atac_out = self.norm_atac(hat_atac)
+        gate_input = torch.cat([norm_rna_out, norm_atac_out], dim=-1)
+        gate = torch.sigmoid(self.gating_mlp(gate_input))
 
         if run_debug_stats:
             with torch.no_grad():
-                q_det = q.detach()
-                k_det = k.detach()
+                gate_det = gate.detach()
                 print(
-                    "[SpectralTransformerGate][Q stats] "
-                    f"mean={q_det.mean().item():.6f}, var={q_det.var(unbiased=False).item():.6f}, "
-                    f"min={q_det.min().item():.6f}, max={q_det.max().item():.6f}"
+                    "[SpectralTransformerGate][Gate stats] "
+                    f"mean={gate_det.mean().item():.6f}, var={gate_det.var(unbiased=False).item():.6f}, "
+                    f"min={gate_det.min().item():.6f}, max={gate_det.max().item():.6f}"
                 )
-                print(
-                    "[SpectralTransformerGate][K stats] "
-                    f"mean={k_det.mean().item():.6f}, var={k_det.var(unbiased=False).item():.6f}, "
-                    f"min={k_det.min().item():.6f}, max={k_det.max().item():.6f}"
-                )
-
-        scale = self.dim ** 0.5
-        logits = torch.matmul(q, k.t()) / scale
-
-        n_nodes = hat_rna.size(0)
-        if evals is None:
-            eig_mask = torch.zeros((n_nodes, n_nodes), device=hat_rna.device, dtype=hat_rna.dtype)
-        else:
-            evals = evals.to(device=hat_rna.device, dtype=hat_rna.dtype).view(-1)
-            if evals.numel() != n_nodes:
-                raise ValueError(f"evals size mismatch: expected {n_nodes}, got {evals.numel()}")
-            penalty_vec = -self.gamma_eig * torch.log1p(torch.clamp(evals, min=0.0))
-            # 修复代码：将高频惩罚作为行向量，广播到所有 Query (形状: [1, K])
-            # 这样不仅允许同频对角线对齐，还能正确抑制所有对高频 Key 的注意力
-            eig_mask = penalty_vec.unsqueeze(0)
 
         if run_debug_stats:
             with torch.no_grad():
-                logits_det = logits.detach()
-                eig_mask_det = eig_mask.detach()
-
                 print(
-                    "[SpectralTransformerGate][Score range] "
-                    f"logits_min={logits_det.min().item():.6f}, logits_max={logits_det.max().item():.6f}, "
-                    f"logits_mean={logits_det.mean().item():.6f}"
+                    "[SpectralTransformerGate][Fused stats] "
+                    f"rna_mean={norm_rna_out.mean().item():.6f}, atac_mean={norm_atac_out.mean().item():.6f}"
                 )
-
-                non_zero_mask_vals = eig_mask_det[eig_mask_det != 0]
-                if non_zero_mask_vals.numel() > 0:
-                    print(
-                        "[SpectralTransformerGate][Mask stats] "
-                        f"mask_min={non_zero_mask_vals.min().item():.6f}, "
-                        f"mask_max={non_zero_mask_vals.max().item():.6f}, "
-                        f"mask_mean={non_zero_mask_vals.mean().item():.6f}, "
-                        f"non_zero={non_zero_mask_vals.numel()}"
-                    )
-                else:
-                    print("[SpectralTransformerGate][Mask stats] all mask entries are zero.")
-
-                combined_det = (logits + eig_mask).detach()
-                print(
-                    "[SpectralTransformerGate][Combined score range] "
-                    f"combined_min={combined_det.min().item():.6f}, "
-                    f"combined_max={combined_det.max().item():.6f}, "
-                    f"combined_mean={combined_det.mean().item():.6f}"
-                )
-
-        attn = F.softmax(logits + eig_mask, dim=-1)
 
         epoch_key = self.current_epoch if self.current_epoch is not None else -1
         if run_debug_plot and (epoch_key not in self._debug_plotted_epochs):
             with torch.no_grad():
                 try:
                     os.makedirs("./diagnostics", exist_ok=True)
-                    attn_map = attn.detach().cpu().float().numpy()
+                    gate_map = gate.detach().cpu().float().numpy()
                     plt.figure(figsize=(7, 6))
-                    plt.imshow(attn_map, cmap="viridis", aspect="auto")
+                    plt.imshow(gate_map, cmap="viridis", aspect="auto")
                     plt.colorbar(fraction=0.046, pad=0.04)
-                    plt.title("Spectral Cross-Attention Map")
+                    plt.title("Spectral Adaptive Gating Map")
                     plt.xlabel("Key Index")
                     plt.ylabel("Query Index")
                     plt.tight_layout()
@@ -178,16 +130,16 @@ class SpectralTransformerGate(nn.Module):
                         plt.savefig(f"./diagnostics/attention_map_epoch_{self.current_epoch}.png", dpi=220)
                     plt.close()
                     print(
-                        "[SpectralTransformerGate][Debug] saved attention heatmap to "
+                        "[SpectralTransformerGate][Debug] saved gating heatmap to "
                         "./diagnostics/attention_map.png"
                     )
                 except Exception as e:
-                    print(f"[SpectralTransformerGate][Debug] attention map save failed: {e}")
+                    print(f"[SpectralTransformerGate][Debug] gating map save failed: {e}")
                 finally:
                     self._debug_plotted_epochs.add(epoch_key)
 
-        hat_fused = torch.matmul(attn, v) + hat_rna
-        return hat_fused, attn
+        hat_fused = gate * norm_rna_out + (1.0 - gate) * norm_atac_out
+        return hat_fused, gate
 
 
 class SymmetricSFIB(nn.Module):

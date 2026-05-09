@@ -26,7 +26,8 @@ def parse_args():
     parser.add_argument(
         "--config",
         # default="configs/config_mouse_brain_p22.yaml",
-        default="configs/e18_5_s1/config_misar_e18_5_s1.yaml",
+        # default="configs/e18_5_s1/config_misar_e18_5_s1.yaml",
+        default="configs/e18_5_s2/config_misar_e18_5_s2.yaml",
         # default="configs/renal/config_renal_Y7_T.yaml",
         help="Path to YAML config file",
     )

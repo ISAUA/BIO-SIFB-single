@@ -6,8 +6,8 @@ project:                              # 项目级配置
   eval_dir: "./results/misar/misar_e18-5-s2/predictions/"   # 评估输出目录
 
 eval:                                 # 评估配置
-  checkpoint: "best"                 # 默认评估 checkpoint key
-  n_clusters: 14                      # mclust 聚类簇数（点位数）
+  checkpoint: "1500"                 # 默认评估 checkpoint key
+  n_clusters: 16                      # mclust 聚类簇数（点位数）
   mclust_pca_dim: 20                  # mclust 前 PCA 维度
   resolution: 0.9                     # Leiden 分辨率（mclust失败回退时使用）
   moran_k: 6                          # Moran's I 邻居数
@@ -22,7 +22,7 @@ eval:                                 # 评估配置
     palette_mode: "high_contrast"     # 调色板模式
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
-    final: "ckpt_3000.pth"            # 最终/指定轮次 checkpoint 文件名
+    final: "ckpt_1500.pth"            # 最终/指定轮次 checkpoint 文件名
 
 translation:                          # 翻译专项配置（Stage 2 / Stage 3.5）
   stage2:                             # 翻译器训练
@@ -30,7 +30,7 @@ translation:                          # 翻译专项配置（Stage 2 / Stage 3.5
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # Stage2 训练用 S1 切片数据
     backbone:                         # 冻结主干来源（通常指向 S1）
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
-      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+      checkpoint: "1500"             # 主干 checkpoint key 或文件名
     model:                            # 翻译器结构
       n_blocks: 3                     # SF_Translator_R2A 残差 MLP 层数
       hidden_dim: 128                 # 翻译器隐层维度（默认与 sfib_dim 一致）
@@ -48,7 +48,7 @@ translation:                          # 翻译专项配置（Stage 2 / Stage 3.5
   stage35:                            # 翻译评估
     backbone:                         # 评估时冻结主干来源
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
-      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+      checkpoint: "1500"             # 主干 checkpoint key 或文件名
     metrics:                          # 评估指标参数
       n_clusters: 14                  # mclust 目标簇数
       pca_dim: 20                     # mclust 前 PCA 维度
@@ -66,7 +66,7 @@ data:                                 # 数据配置
     gtf: "../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
   parameters:                         # 预处理超参数
     reduce:                         # 降维加速设置
-      mode: "gpu_safe"            # cpu|gpu_safe|gpu_full（默认稳定优先）
+      mode: "cpu"            # cpu|gpu_safe|gpu_full（默认稳定优先）
       device: "auto"               # auto|cuda|cpu
       q_offset: 8                 # 低秩分解冗余维度（q=n_components+q_offset）
       niter: 3                    # 低秩迭代次数
@@ -82,15 +82,13 @@ data:                                 # 数据配置
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
     knn_k: 9                          # 空间图 k 近邻
+    use_rna_similarity_edge_weight: true  # 是否启用基于 RNA 相似度的边权重
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
   rna_in_dim: 3000                    # RNA 输入维度
   n_freq_components: 3000             
-  ino_use_edge_weight: true           
-  ino_pre_smooth_enable: true         
-  ino_pre_smooth_alpha: 0.8
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
   rna_dropout: 0.1                    # RNA 分支 dropout
@@ -101,6 +99,9 @@ model:                                # 模型结构配置
   latent_dim: 50                      # 潜变量维度
   sfib_dim: 128                       # SFIB 特征维度
   sfib_ino_layers: 2                  # SFIB INO 层数
+  ino_use_edge_weight: true           # INO 是否启用边权重
+  ino_pre_smooth_enable: true         # INO 前是否启用预平滑
+  ino_pre_smooth_alpha: 0.8           # 预平滑保真系数 alpha（禁用预平滑时该值不生效）
   proj_hidden_dim: 64                 # 对比投影头隐藏维度
   proj_output_dim: 64                 # 对比投影头输出维度
   rna_dec_hidden: 512                 # RNA 解码器隐藏维度
@@ -112,17 +113,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 3000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 2000               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 5.0                     # RNA 重构损失权重
   lambda_atac: 1.0                    # ATAC 重构损失权重
   lambda_clip: 0.5                    # 对比损失权重
-  fade_start_epoch: 2000              # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                # CLIP 权重退火结束轮次
+  lambda_smooth: 1.0                 # 平滑损失权重
+  fade_start_epoch: 1000              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1500                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_atac: 20.0               # ATAC 正样本加权
   clip_temperature: 0.5               # CLIP 温度参数

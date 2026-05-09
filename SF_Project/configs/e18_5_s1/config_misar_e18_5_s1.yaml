@@ -22,7 +22,7 @@ eval:                                 # 评估配置
     palette_mode: "high_contrast"     # 调色板模式
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
-    final: "ckpt_300.pth"            # 最终/指定轮次 checkpoint 文件名
+    final: "ckpt_1500.pth"            # 最终/指定轮次 checkpoint 文件名
 
 data:                                 # 数据配置
   raw_path: "data/raw/misar/misar_e18-5-s1"    # 原始数据目录

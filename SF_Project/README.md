@@ -49,7 +49,7 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate
 
 ```bash
 python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_1000.pth --n-clusters 14
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_1500.pth --n-clusters 14
 ```
 
 ## e18.5 常用命令
@@ -70,7 +70,7 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
 python run_pipeline.py --dataset misar_e18_5_s1 --steps train
 
 # evaluate
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_2100.pth --n-clusters 14
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_1500.pth --n-clusters 14
 ```
 
 ### 单阶段确定性启动（推荐）

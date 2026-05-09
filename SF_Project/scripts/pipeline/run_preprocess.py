@@ -734,10 +734,10 @@ def main():
         )
 
         # --- 请加上这段代码，切除被深度绑架的 PC1 ---
-        from sklearn.decomposition import TruncatedSVD
+        # from sklearn.decomposition import TruncatedSVD
         # 由于你的 SVD 是在 reduce_modality_features 里做的，你可以在外面直接切掉第一列
-        print("   [ATAC] Dropping SVD PC1 due to high sequencing depth correlation.")
-        atac_feat_np = atac_feat_np[:, 1:]
+        # print("   [ATAC] Dropping SVD PC1 due to high sequencing depth correlation.")
+        # atac_feat_np = atac_feat_np[:, 1:]
         # ---------------------------------------------
 
         # if sparse.issparse(adata_atac.X):

@@ -49,10 +49,12 @@ data:                                 # 数据配置
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
     knn_k: 9                          # 空间图 k 近邻
+    use_rna_similarity_edge_weight: false  # 是否启用基于 RNA 相似度的边权重
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
+  n_freq_components: 3000             # 高频傅里叶特征数
   rna_in_dim: 3000                    # RNA 输入维度
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
@@ -65,7 +67,7 @@ model:                                # 模型结构配置
   sfib_dim: 128                       # SFIB 特征维度
   sfib_ino_layers: 2                  # SFIB INO 层数
   ino_use_edge_weight: true           # INO 是否使用边权重（false 时仅用拓扑）
-  ino_pre_smooth_enable: true         # INO 前是否启用预平滑
+  ino_pre_smooth_enable: false         # INO 前是否启用预平滑
   ino_pre_smooth_alpha: 0.7           # 预平滑保真系数 alpha（禁用预平滑时该值不生效）
   proj_hidden_dim: 64                 # 对比投影头隐藏维度
   proj_output_dim: 64                 # 对比投影头输出维度
@@ -78,17 +80,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 3000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 2000               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 5.0                     # RNA 重构损失权重
   lambda_atac: 1.0                    # ATAC 重构损失权重
-  lambda_clip: 0.5                    # 对比损失权重
-  fade_start_epoch: 2000              # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                # CLIP 权重退火结束轮次
+  lambda_clip: 0.1                    # 对比损失权重
+  lambda_smooth: 0.1                  # 平滑损失权重
+  fade_start_epoch: 800              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1200                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_atac: 20.0               # ATAC 正样本加权
   clip_temperature: 0.5               # CLIP 温度参数

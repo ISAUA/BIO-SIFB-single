@@ -49,10 +49,12 @@ data:                                 # 数据配置
     tfidf_eps: 1e-6                   # TF-IDF 平滑项
     tss_window: 150000                # TSS 上下游窗口(bp)
     knn_k: 7                          # 空间图 k 近邻
+    use_rna_similarity_edge_weight: false  # 是否启用基于 RNA 相似度的边权重
     ground_truth_key: "Combined_Clusters" # 真实标签列名
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
+  n_freq_components: 3000             # 高频傅里叶特征数
   rna_in_dim: 3000                    # RNA 输入维度
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
@@ -98,3 +100,36 @@ train:                                # 训练配置
   log_interval: 10                    # 日志打印间隔
   log_tail_blank_lines: 5             # 训练结束后日志空行数
   best_name: "ckpt_best.pth"         # 最优模型文件名
+
+translation:                          # 翻译专项配置（Stage 2 / Stage 3.5）
+  stage2:                             # 翻译器训练
+    data:                             # 训练数据来源（S1 自身）
+      config: "configs/e15_5_s1/config_misar_e15_5_s1.yaml"  # Stage2 训练用 S1 配置
+    backbone:                         # 冻结主干来源（S1 自身）
+      config: "configs/e15_5_s1/config_misar_e15_5_s1.yaml"  # 主干配置位置
+      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+    model:                            # 翻译器结构
+      n_blocks: 3                     # SF_Translator_R2A 残差 MLP 层数
+      hidden_dim: 128                 # 翻译器隐层维度（默认与 sfib_dim 一致）
+    train:                            # 翻译器训练超参数
+      epochs: 2000                    # Stage2 训练轮数
+      learning_rate: 1e-3             # 学习率
+      weight_decay: 1e-4              # 权重衰减
+      lambda_cosine: 1.0              # 潜变量余弦损失权重
+      lambda_mse: 1.0                 # 潜变量 MSE 损失权重
+      lambda_recon: 1.0               # WeightedMSE 重构损失权重
+    save:                             # 翻译器权重保存
+      save_every: 50                  # 间隔保存
+      best_name: "translator_r2a_best.pth"  # 最优翻译器文件名
+
+  stage35:                            # 翻译评估
+    backbone:                         # 评估时冻结主干来源（S1 自身）
+      config: "configs/e15_5_s1/config_misar_e15_5_s1.yaml"  # 主干配置位置
+      checkpoint: "2100"             # 主干 checkpoint key 或文件名
+    metrics:                          # 评估指标参数
+      n_clusters: 12                  # mclust 目标簇数
+      pca_dim: 20                     # mclust 前 PCA 维度
+      moran_k: 6                      # Moran's I 邻居数
+    io:                               # 评估输出与输入
+      translator_checkpoint: null     # 可选：指定翻译器路径；null 时用 stage2.save.best_name
+      summary_csv_name: "translation_eval_stage35.csv"  # 评估汇总文件名

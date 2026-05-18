@@ -7,8 +7,8 @@ project:                              # 项目级配置
 
 eval:                                 # 评估配置
   checkpoint: "best"                 # 默认评估 checkpoint key
-  cluster_method: "leiden"           # 代谢组评估固定使用 Leiden
-  n_clusters: 14                      # mclust 聚类簇数（仅非代谢组评估使用）
+  cluster_method: "mclust"           # 代谢组评估固定使用 mclust
+  n_clusters: 11                      # mclust 聚类簇数（仅非代谢组评估使用）
   mclust_pca_dim: 20                  # mclust 前 PCA 维度（仅非代谢组评估使用）
   resolution: 0.9                     # Leiden 分辨率
   moran_k: 6                          # Moran's I 邻居数
@@ -98,18 +98,18 @@ model:                                # 模型结构配置
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 3000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 2000               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
-  lambda_rna: 5.0                     # RNA 重构损失权重
-  lambda_atac: 1.0                    # 第二模态重构损失权重（SM 替换 ATAC）
+  lambda_rna: 10.0                     # RNA 重构损失权重
+  lambda_atac: 10.0                    # 第二模态重构损失权重（SM 替换 ATAC）
   lambda_clip: 0.5                    # 对比损失权重
-  lambda_smooth: 1.0                  # 平滑损失权重
-  fade_start_epoch: 2000              # CLIP 权重退火起始轮次
-  fade_end_epoch: 2500                # CLIP 权重退火结束轮次
+  lambda_smooth: 0                  # 平滑损失权重
+  fade_start_epoch: 1000              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1500                # CLIP 权重退火结束轮次
   pos_weight_rna: 10.0                # RNA 正样本加权
   pos_weight_atac: 20.0               # 第二模态正样本加权（SM 替换 ATAC）
   clip_temperature: 0.5               # CLIP 温度参数

@@ -8,8 +8,8 @@ project:                              # 项目级配置
 eval:                                 # 评估配置
   checkpoint: "1500"                 # 默认评估 checkpoint key
   cluster_method: "mclust"           # 代谢组评估固定使用 Leiden
-  n_clusters: 14                      # mclust 聚类簇数（仅非代谢组评估使用）
-  mclust_pca_dim: 11                  # mclust 前 PCA 维度（仅非代谢组评估使用）
+  n_clusters: 11                      # mclust 聚类簇数（仅非代谢组评估使用）
+  mclust_pca_dim: 20                  # mclust 前 PCA 维度（仅非代谢组评估使用）
   resolution: 0.9                     # Leiden 分辨率
   moran_k: 6                          # Moran's I 邻居数
   plotting:                           # 绘图参数
@@ -49,7 +49,7 @@ data:                                 # 数据配置
     tss_window: 150000                # ATAC 相关参数保留占位（SM replace_atac 时不使用）
     knn_k: 9                          # 空间图 k 近邻
     use_rna_similarity_edge_weight: true  # 是否启用基于 RNA 相似度的边权重
-    ground_truth_key: null            # 真实标签列名（未知时置空）
+    ground_truth_key: "label"            # 真实标签列名（未知时置空）
 
 # ------------------------------------------
 # 1.5 代谢组 (SM) 专用配置

@@ -206,6 +206,26 @@ def calculate_clustering_scores(cluster_labels, ground_truth):
     }
 
 
+def compute_score(cluster_moran, cluster_scores):
+    if cluster_moran is None or cluster_scores is None:
+        return None
+
+    return float(
+        float(cluster_moran)
+        + float(cluster_scores["ARI"])
+        + float(cluster_scores["NMI"])
+        + float(cluster_scores["AMI"])
+        + float(cluster_scores["HOM"])
+    )
+
+
+def resolve_prediction_dir(save_dir):
+    save_dir = save_dir.rstrip('/\\')
+    if os.path.basename(save_dir) == 'checkpoints':
+        return os.path.join(os.path.dirname(save_dir), "predictions")
+    return os.path.join(save_dir, "predictions")
+
+
 def infer_epoch_label(ckpt_name, epoch):
     base = os.path.splitext(os.path.basename(ckpt_name))[0]
     if "best" in base.lower():
@@ -435,7 +455,18 @@ def visualize_and_save(
         if logger is not None:
             logger.warning("Ground truth unavailable or invalid for %s; skip ARI/NMI/AMI/HOM.", suffix)
 
-    return plot_path, h5ad_path
+    metrics_payload = {
+        "latent_moran": None if mi_latent_avg is None else float(mi_latent_avg),
+        "cluster_moran": None if mi_cluster_avg is None else float(mi_cluster_avg),
+        "ARI": None if cluster_scores is None else float(cluster_scores["ARI"]),
+        "NMI": None if cluster_scores is None else float(cluster_scores["NMI"]),
+        "AMI": None if cluster_scores is None else float(cluster_scores["AMI"]),
+        "HOM": None if cluster_scores is None else float(cluster_scores["HOM"]),
+        "n_valid": None if cluster_scores is None else int(cluster_scores["n_valid"]),
+        "score": compute_score(mi_cluster_avg, cluster_scores),
+    }
+
+    return plot_path, h5ad_path, metrics_payload
 
 
 def resolve_checkpoint_name(eval_cfg, epoch, best_epoch):
@@ -516,61 +547,136 @@ def main():
 
     success = 0
     failed = 0
+    records = []
 
     for epoch in epochs:
         ckpt_name = resolve_checkpoint_name(eval_cfg, epoch, args.best_epoch)
         ckpt_path = os.path.join(save_dir, ckpt_name)
+        suffix = f"epoch_{epoch}"
+        if epoch == args.best_epoch:
+            suffix = f"epoch_{epoch}_best"
+        is_loss_best_row = int(epoch == args.best_epoch)
 
         logger.info("Evaluating epoch %d with %s", epoch, ckpt_name)
         if not os.path.exists(ckpt_path):
             logger.warning("Skip: checkpoint not found at %s", ckpt_path)
             failed += 1
+            records.append({
+                "requested_epoch": int(epoch),
+                "checkpoint": ckpt_name,
+                "best_suffix": suffix,
+                "is_loss_best_row": is_loss_best_row,
+                "cluster_moran": np.nan,
+                "ARI": np.nan,
+                "NMI": np.nan,
+                "AMI": np.nan,
+                "HOM": np.nan,
+                "score": np.nan,
+                "status": "missing_checkpoint",
+            })
             continue
 
-        state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
-        model.load_state_dict(state_dict, strict=False)
+        try:
+            state_dict = torch_load_compat(ckpt_path, map_location=device, weights_only=True)
+            model.load_state_dict(state_dict, strict=False)
 
-        with torch.no_grad():
-            outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
-            z_final = outputs[0]
+            with torch.no_grad():
+                outputs = model(rna_feat, atac_feat, edge_index, u_basis, evals, edge_weight=edge_weight)
+                z_final = outputs[0]
 
-        epoch_label = infer_epoch_label(ckpt_name, epoch)
-        suffix = f"epoch_{epoch}"
-        if epoch == args.best_epoch:
-            suffix = f"epoch_{epoch}_best"
+            epoch_label = infer_epoch_label(ckpt_name, epoch)
 
-        plot_path, h5ad_path = visualize_and_save(
-            z_final,
-            coords,
-            save_dir,
-            n_clusters=n_clusters,
-            mclust_pca_dim=mclust_pca_dim,
-            cluster_method=cluster_method,
-            resolution=resolution,
-            epoch_label=epoch_label,
-            output_suffix=suffix,
-            ground_truth=ground_truth,
-            logger=logger,
-            moran_k=moran_k,
-            plot_cfg=plot_cfg,
-            checkpoint_name=ckpt_name,
-            seed=seed,
-            moran_mode="cluster_only",
-        )
+            plot_path, h5ad_path, metrics_payload = visualize_and_save(
+                z_final,
+                coords,
+                save_dir,
+                n_clusters=n_clusters,
+                mclust_pca_dim=mclust_pca_dim,
+                cluster_method=cluster_method,
+                resolution=resolution,
+                epoch_label=epoch_label,
+                output_suffix=suffix,
+                ground_truth=ground_truth,
+                logger=logger,
+                moran_k=moran_k,
+                plot_cfg=plot_cfg,
+                checkpoint_name=ckpt_name,
+                seed=seed,
+                moran_mode="cluster_only",
+            )
 
-        abs_plot_path = os.path.abspath(plot_path)
-        abs_h5ad_path = os.path.abspath(h5ad_path)
-        logger.info("Artifact (%s) plot: %s", suffix, abs_plot_path)
-        logger.info("Artifact (%s) h5ad: %s", suffix, abs_h5ad_path)
-        print(f"Artifact ({suffix}) plot: {abs_plot_path}")
-        print(f"Artifact ({suffix}) h5ad: {abs_h5ad_path}")
-        success += 1
+            abs_plot_path = os.path.abspath(plot_path)
+            abs_h5ad_path = os.path.abspath(h5ad_path)
+            logger.info("Artifact (%s) plot: %s", suffix, abs_plot_path)
+            logger.info("Artifact (%s) h5ad: %s", suffix, abs_h5ad_path)
+            print(f"Artifact ({suffix}) plot: {abs_plot_path}")
+            print(f"Artifact ({suffix}) h5ad: {abs_h5ad_path}")
+
+            score = metrics_payload["score"]
+            status = "ok" if score is not None else "partial_metrics"
+            records.append({
+                "requested_epoch": int(epoch),
+                "checkpoint": ckpt_name,
+                "best_suffix": suffix,
+                "is_loss_best_row": is_loss_best_row,
+                "cluster_moran": np.nan if metrics_payload["cluster_moran"] is None else float(metrics_payload["cluster_moran"]),
+                "ARI": np.nan if metrics_payload["ARI"] is None else float(metrics_payload["ARI"]),
+                "NMI": np.nan if metrics_payload["NMI"] is None else float(metrics_payload["NMI"]),
+                "AMI": np.nan if metrics_payload["AMI"] is None else float(metrics_payload["AMI"]),
+                "HOM": np.nan if metrics_payload["HOM"] is None else float(metrics_payload["HOM"]),
+                "score": np.nan if score is None else float(score),
+                "status": status,
+            })
+            success += 1
+        except Exception as e:
+            logger.exception("Evaluation failed for epoch %d with %s: %s", epoch, ckpt_name, str(e))
+            failed += 1
+            records.append({
+                "requested_epoch": int(epoch),
+                "checkpoint": ckpt_name,
+                "best_suffix": suffix,
+                "is_loss_best_row": is_loss_best_row,
+                "cluster_moran": np.nan,
+                "ARI": np.nan,
+                "NMI": np.nan,
+                "AMI": np.nan,
+                "HOM": np.nan,
+                "score": np.nan,
+                "status": f"error:{type(e).__name__}",
+            })
+
+    pred_dir = resolve_prediction_dir(save_dir)
+    os.makedirs(pred_dir, exist_ok=True)
+    csv_path = os.path.join(
+        pred_dir,
+        f"range_metrics_start{args.start}_end{args.end}_step{args.step}.csv",
+    )
+    records_df = pd.DataFrame(
+        records,
+        columns=[
+            "requested_epoch",
+            "checkpoint",
+            "best_suffix",
+            "is_loss_best_row",
+            "cluster_moran",
+            "ARI",
+            "NMI",
+            "AMI",
+            "HOM",
+            "score",
+            "status",
+        ],
+    )
+    records_df.to_csv(csv_path, index=False)
+    abs_csv_path = os.path.abspath(csv_path)
+    logger.info("Range eval scores csv: %s", abs_csv_path)
 
     logger.info("Range evaluation complete. Success=%d | Failed/Skipped=%d", success, failed)
     abs_log_path = os.path.abspath(log_path)
     logger.info("Range eval log: %s", abs_log_path)
     print("\n✅ Range evaluation complete")
     print(f"   Success: {success} | Failed/Skipped: {failed}")
+    print(f"   Metrics CSV: {abs_csv_path}")
     print(f"   Log: {abs_log_path}")
 
     if os.environ.get("SF_PIPELINE_RUN") != "1":

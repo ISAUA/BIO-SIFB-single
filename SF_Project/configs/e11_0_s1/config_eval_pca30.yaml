@@ -1,13 +1,13 @@
 project:
-  name: TUNE_e11_0_s1_k9_a0p7
+  name: SF_MISAR_E11_0_S1_eval_pca30
   version: 1.0.0
   seed: 42
-  save_dir: ./results/e11_0_s1/tuning/k9_a0p7/checkpoints/
-  eval_dir: ./results/e11_0_s1/tuning/k9_a0p7/predictions/
+  save_dir: ./results/misar/misar_e11_0-s1/checkpoints/
+  eval_dir: ./results/misar/misar_e11_0-s1/predictions/
 eval:
   checkpoint: best
   n_clusters: 7
-  mclust_pca_dim: 20
+  mclust_pca_dim: 30
   resolution: 0.9
   moran_k: 6
   plotting:
@@ -28,7 +28,7 @@ eval:
     final: ckpt_300.pth
 data:
   raw_path: data/raw/misar/misar_e11_0-s1
-  processed_path: data/processed/e11_0_s1/tuning/k9_a0p7
+  processed_path: data/processed/misar/misar_e11_0-s1
   files:
     rna_h5ad: adata_RNA.h5ad
     atac_h5ad: adata_Peak.h5ad
@@ -51,9 +51,11 @@ data:
     tfidf_eps: 1e-6
     tss_window: 150000
     knn_k: 9
+    use_rna_similarity_edge_weight: false
     ground_truth_key: Combined_Clusters
 model:
   name: SFNet
+  n_freq_components: 3000
   rna_in_dim: 3000
   hidden_dim: 512
   rna_n_heads: 4
@@ -66,7 +68,7 @@ model:
   sfib_dim: 128
   sfib_ino_layers: 2
   ino_use_edge_weight: true
-  ino_pre_smooth_enable: true
+  ino_pre_smooth_enable: false
   ino_pre_smooth_alpha: 0.7
   proj_hidden_dim: 64
   proj_output_dim: 64
@@ -81,17 +83,18 @@ model:
   - 20
   model.sfib_debug_every_n_epochs: 20
 train:
-  epochs: 3000
+  epochs: 1500
   batch_size: 1
   learning_rate: 1e-3
   learning_rate_low: 1e-4
-  lr_switch_epoch: 2000
+  lr_switch_epoch: 1000
   weight_decay: 1e-4
   lambda_rna: 5.0
   lambda_atac: 1.0
-  lambda_clip: 0.5
-  fade_start_epoch: 2000
-  fade_end_epoch: 2500
+  lambda_clip: 0.1
+  lambda_smooth: 0.1
+  fade_start_epoch: 800
+  fade_end_epoch: 1200
   pos_weight_rna: 10.0
   pos_weight_atac: 20.0
   clip_temperature: 0.5

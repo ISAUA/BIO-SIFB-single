@@ -25,6 +25,10 @@ DATASET_CONFIG = {
     "misar_e18_5_s2": "configs/e18_5_s2/config_misar_e18_5_s2.yaml",
     "misar_e18": "configs/e18_5_s1/config_misar_e18.yaml",
     "simulation1": "configs/simulation/config_simulation1.yaml",
+    "simulation2": "configs/simulation/config_simulation2.yaml",
+    "simulation3": "configs/simulation/config_simulation3.yaml",
+    "simulation4": "configs/simulation/config_simulation4.yaml",
+    "simulation5": "configs/simulation/config_simulation5.yaml",
 }
 
 ALL_STEPS = ["preprocess", "train", "evaluate"]

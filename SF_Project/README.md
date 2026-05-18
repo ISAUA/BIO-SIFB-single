@@ -1,229 +1,380 @@
 # BIO-SFIB Pipeline 使用说明
 
-本项目提供统一入口脚本用于预处理、训练与评估多组学空间数据，可在不同数据集之间灵活切换。
+本项目提供统一入口脚本，用于多组学空间数据的预处理、训练、评估、跨模态翻译和翻译后融合评估。
 
-目前内置数据集：
+## 环境准备
 
-- human
-- mouse（P22）
-- renal（SM 替换 ATAC）
-- MISAR：e11/e13.5/e15.5/e18.5 的 s1/s2 共 8 组
-
-## 依赖安装
-
-```bash
-pip install -r requirements.txt
-```
-
-## 快速开始
-
-### 0) 进入环境和文件夹
 ```bash
 source ~/.bashrc
 conda activate sc_bridge
-cd SF_Project
+cd /root/autodl-tmp/BIO-SFIB-single/SF_Project
+pip install -r requirements.txt
 ```
 
-### 1) 全流程运行
+常用入口都保留在项目根目录，例如 `run_pipeline.py`、`run_train.py`、`run_evaluate.py`。根目录入口会转发到 `scripts/pipeline/` 下的实际实现，平时直接复制下面的命令即可。
+
+## 通用规则
+
+`run_pipeline.py` 支持三类阶段：
+
+- `preprocess`
+- `train`
+- `evaluate`
 
 ```bash
-python run_pipeline.py --dataset misar_e18_5_s1
-python run_pipeline.py --dataset mouse_brain_p22
+# 全流程
+python run_pipeline.py --dataset <dataset_name>
+
+# 只跑部分阶段
+python run_pipeline.py --dataset <dataset_name> --steps preprocess
+python run_pipeline.py --dataset <dataset_name> --steps train
+python run_pipeline.py --dataset <dataset_name> --steps evaluate
+python run_pipeline.py --dataset <dataset_name> --steps preprocess,train
+
+# 评估时覆盖 checkpoint / 聚类参数
+python run_pipeline.py --dataset <dataset_name> --steps evaluate --checkpoint ckpt_best.pth
+python run_pipeline.py --dataset <dataset_name> --steps evaluate --checkpoint ckpt_1500.pth --n-clusters 14
+python run_pipeline.py --dataset <dataset_name> --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9
 ```
 
-### 2) 仅运行部分阶段
-
-`--steps` 逗号分隔，可选 `preprocess`, `train`, `evaluate`。
+如果需要固定随机性环境，使用：
 
 ```bash
-python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
-python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess,train
-python run_pipeline.py --dataset mouse_brain_p22 --steps preprocess,train
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate
+./run_deterministic.sh <config_yaml> <python_script> [extra args...]
 ```
 
-### 3) 评估阶段附加参数
-
-- `--checkpoint`: 指定评估使用的 checkpoint key 或文件名（默认读取配置文件 `eval.checkpoint`）。
-- `--n-clusters`: 指定 mclust 聚类簇数（不传时默认使用配置文件 `eval.n_clusters`，默认 7）。
-
-```bash
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_1500.pth --n-clusters 14
-```
-
-## e18.5 常用命令
-
-### 全流程
-
-```bash
-python run_pipeline.py --dataset misar_e18_5_s1
-```
-
-### 仅预处理 / 仅训练 / 仅评估（示例）
-
-```bash
-# preprocess
-python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess
-
-# train
-python run_pipeline.py --dataset misar_e18_5_s1 --steps train
-
-# evaluate
-python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_1500.pth --n-clusters 14
-```
-
-### 单阶段确定性启动（推荐）
-
-```bash
-./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_preprocess.py
-./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
-./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
-```
-
-### 跨模态翻译训练（Stage 2: RNA -> ATAC）
-
-先确保已进入环境：`conda activate sc_bridge`
-
-当前推荐使用 S2 配置统一驱动翻译训练（主干来源、层数、loss 权重等由 `translation.stage2` 控制；训练数据来源由 `translation.stage2.data.config` 指向 S1）：
-
-```bash
-python run_train_translator.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
-```
-
-如需临时覆盖配置（优先级高于 YAML）：
-
-```bash
-python run_train_translator.py \
-	--config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
-	--backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
-	--backbone-checkpoint 2100 \
-	--epochs 400 \
-	--lr 1e-4 \
-	--n-blocks 3 \
-	--lambda-cosine 1.0 \
-	--lambda-mse 1.0 \
-	--lambda-recon 1.0
-```
-
-如需切换翻译器训练数据切片，请直接修改 `translation.stage2.data.config`（例如从 S1 切到 S2）。
-
-输出默认保存在 `save_dir/translator_checkpoints/`，包含 best 与 last 权重文件。
-
-### 跨模态翻译评估（Translation Evaluation）
-
-当前评估为 Stage 3.5 潜变量评估（Lower/Translated/Upper 三组对照），输出 ARI / NMI / AMI / HOM / Cluster Moran's I。先激活环境：`conda activate sc_bridge`
-
-```bash
-python evaluate_translation.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
-```
-
-如需覆盖默认配置（`translation.stage35`）：
-
-```bash
-python evaluate_translation.py \
-	--config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
-	--backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
-	--backbone-checkpoint 2100 \
-	--translator-checkpoint results/misar/misar_e18-5-s2/checkpoints/translator_checkpoints/translator_r2a_best.pth \
-	--n-clusters 14 \
-	--pca-dim 20 \
-	--moran-k 6
-```
-
-评估结果会在 `project.eval_dir` 下输出汇总文件 `translation_eval_stage35.csv`。
-
-可用 `SEED_OVERRIDE` 临时覆盖配置中的 seed：
+也可以临时覆盖 seed：
 
 ```bash
 SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
 ```
 
-### 兼容别名
+## MISAR 数据集命令
 
-`--dataset misar_e18` 仍可使用，默认指向 `misar_e18_5_s1` 配置。
-
-## Y7_T（SM 替换 ATAC）常用命令
-
-### 全流程
+### e11.0 s1
 
 ```bash
-python run_pipeline.py --dataset Y7_T
+python run_pipeline.py --dataset misar_e11_0_s1
+python run_pipeline.py --dataset misar_e11_0_s1 --steps preprocess
+python run_pipeline.py --dataset misar_e11_0_s1 --steps train
+python run_pipeline.py --dataset misar_e11_0_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e11_0_s1/config_misar_e11_0_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/e11_0_s1/config_misar_e11_0_s1.yaml run_train.py
+./run_deterministic.sh configs/e11_0_s1/config_misar_e11_0_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-### 仅预处理 / 仅训练 / 仅评估（示例）
+PCA 30 评估配置：
 
 ```bash
-# preprocess
-python run_pipeline.py --dataset Y7_T --steps preprocess
-
-# train
-python run_pipeline.py --dataset Y7_T --steps train
-
-# evaluate
-python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9
+python run_evaluate.py --config configs/e11_0_s1/config_eval_pca30.yaml --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-### 单阶段确定性启动（推荐）
+### e11.0 s2
 
 ```bash
-./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_preprocess.py
-./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_train.py
-./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --resolution 0.9
+python run_pipeline.py --dataset misar_e11_0_s2
+python run_pipeline.py --dataset misar_e11_0_s2 --steps preprocess
+python run_pipeline.py --dataset misar_e11_0_s2 --steps train
+python run_pipeline.py --dataset misar_e11_0_s2 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
 
-python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --resolution 0.9
+./run_deterministic.sh configs/e11_0_s2/config_misar_e11_0_s2.yaml run_preprocess.py
+./run_deterministic.sh configs/e11_0_s2/config_misar_e11_0_s2.yaml run_train.py
+./run_deterministic.sh configs/e11_0_s2/config_misar_e11_0_s2.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-## 范围评估（可选）
-
-当你需要一次性评估一段轮次（例如 1500-2000）时：
+### e13.5 s1
 
 ```bash
-python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
+python run_pipeline.py --dataset misar_e13_5_s1
+python run_pipeline.py --dataset misar_e13_5_s1 --steps preprocess
+python run_pipeline.py --dataset misar_e13_5_s1 --steps train
+python run_pipeline.py --dataset misar_e13_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e13_5_s1/config_misar_e13_5_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/e13_5_s1/config_misar_e13_5_s1.yaml run_train.py
+./run_deterministic.sh configs/e13_5_s1/config_misar_e13_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-小鼠 P22 专用范围评估（自动按 cluster Moran 指数选最优轮次，并仅输出最优轮次空间图与聚类图）：
+### e13.5 s2
+
+```bash
+python run_pipeline.py --dataset misar_e13_5_s2
+python run_pipeline.py --dataset misar_e13_5_s2 --steps preprocess
+python run_pipeline.py --dataset misar_e13_5_s2 --steps train
+python run_pipeline.py --dataset misar_e13_5_s2 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e13_5_s2/config_misar_e13_5_s2.yaml run_preprocess.py
+./run_deterministic.sh configs/e13_5_s2/config_misar_e13_5_s2.yaml run_train.py
+./run_deterministic.sh configs/e13_5_s2/config_misar_e13_5_s2.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+### e15.5 s1
+
+```bash
+python run_pipeline.py --dataset misar_e15_5_s1
+python run_pipeline.py --dataset misar_e15_5_s1 --steps preprocess
+python run_pipeline.py --dataset misar_e15_5_s1 --steps train
+python run_pipeline.py --dataset misar_e15_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e15_5_s1/config_misar_e15_5_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/e15_5_s1/config_misar_e15_5_s1.yaml run_train.py
+./run_deterministic.sh configs/e15_5_s1/config_misar_e15_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+### e15.5 s2
+
+```bash
+python run_pipeline.py --dataset misar_e15_5_s2
+python run_pipeline.py --dataset misar_e15_5_s2 --steps preprocess
+python run_pipeline.py --dataset misar_e15_5_s2 --steps train
+python run_pipeline.py --dataset misar_e15_5_s2 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e15_5_s2/config_misar_e15_5_s2.yaml run_preprocess.py
+./run_deterministic.sh configs/e15_5_s2/config_misar_e15_5_s2.yaml run_train.py
+./run_deterministic.sh configs/e15_5_s2/config_misar_e15_5_s2.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+### e18.5 s1
+
+```bash
+python run_pipeline.py --dataset misar_e18_5_s1
+python run_pipeline.py --dataset misar_e18_5_s1 --steps preprocess,train
+python run_pipeline.py --dataset misar_e18_5_s1 --steps train
+python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_preprocess.py
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
+./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+兼容别名：
+
+```bash
+python run_pipeline.py --dataset misar_e18
+```
+
+### e18.5 s2
+
+```bash
+python run_pipeline.py --dataset misar_e18_5_s2
+python run_pipeline.py --dataset misar_e18_5_s2 --steps preprocess
+python run_pipeline.py --dataset misar_e18_5_s2 --steps train
+python run_pipeline.py --dataset misar_e18_5_s2 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 14
+
+./run_deterministic.sh configs/e18_5_s2/config_misar_e18_5_s2.yaml run_preprocess.py
+./run_deterministic.sh configs/e18_5_s2/config_misar_e18_5_s2.yaml run_train.py
+./run_deterministic.sh configs/e18_5_s2/config_misar_e18_5_s2.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
+```
+
+## Mouse P22 命令
+
+```bash
+python run_pipeline.py --dataset mouse_brain_p22
+python run_pipeline.py --dataset mouse_brain_p22 --steps preprocess
+python run_pipeline.py --dataset mouse_brain_p22 --steps train
+python run_pipeline.py --dataset mouse_brain_p22 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_preprocess.py
+./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_train.py
+./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+P22 专用范围评估会按 Cluster Moran's I 自动选择最优轮次，并只输出最优轮次图和 h5ad：
 
 ```bash
 python run_evaluate_range_p22.py --start 2500 --end 2600 --step 100
+python run_evaluate_range_p22.py --config configs/config_mouse_brain_p22.yaml --start 2500 --end 2600 --step 100
 ```
 
-说明：
+## Renal 数据集命令
 
-- `--start/--end/--step` 可自定义评估区间。
-- 小鼠 P22 专用脚本固定使用 `configs/config_mouse_brain_p22.yaml`，无需再传配置路径。
-- 小鼠 P22 专用脚本会输出区间内每个轮次的 cluster Moran 指数 CSV，并自动选择 cluster Moran 指数最高的轮次出图。
-- 若需要自定义配置文件路径，可追加 `--config <path>`。
-- 输出默认位于 `results/mouse_brain_p22/` 下（含图、h5ad 与区间评分 CSV）。
+### R114_T
 
-## 自动调参（自然语言工作流）
+```bash
+python run_pipeline.py --dataset R114_T
+python run_pipeline.py --dataset R114_T --steps preprocess,train
+python run_pipeline.py --dataset R114_T --steps train
+python run_pipeline.py --dataset R114_T --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9
 
-说明：项目不再提供 `run_tuning_e15_5_s1.py` 脚本入口，建议使用自然语言工作流执行调参。
+./run_deterministic.sh configs/renal/config_renal_R114_T.yaml run_preprocess.py
+./run_deterministic.sh configs/renal/config_renal_R114_T.yaml run_train.py
+./run_deterministic.sh configs/renal/config_renal_R114_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --resolution 0.9
+```
 
-- 推荐模板：`TUNING_NL_PROMPT_TEMPLATE.md`
-- 全局实验追踪 CSV：`results/experiments_global.csv`
+### Y7_T
 
-## 数据集配置文件
+```bash
+python run_pipeline.py --dataset Y7_T
+python run_pipeline.py --dataset Y7_T --steps preprocess,train
+python run_pipeline.py --dataset Y7_T --steps train
+python run_pipeline.py --dataset Y7_T --steps evaluate --checkpoint ckpt_best.pth --resolution 0.9
 
-数据集映射实现位于 `scripts/pipeline/run_pipeline.py` 的 `DATASET_CONFIG`。
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_preprocess.py
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_train.py
+./run_deterministic.sh configs/renal/config_renal_Y7_T.yaml run_evaluate.py --checkpoint ckpt_best.pth --resolution 0.9
+```
 
-## 脚本目录整理
+Y7_T 范围评估：
 
-为减少根目录复杂度，入口脚本已按功能归并到 `scripts/`：
+```bash
+python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --resolution 0.9
+```
 
-- `scripts/pipeline/`：预处理、训练、评估、范围评估、总流程
-- `scripts/tuning/`：自动调参脚本
-- `scripts/diagnostics/`：诊断脚本
+## Simulation 数据集命令
 
-兼容性说明：
+```bash
+python run_pipeline.py --dataset simulation1
+python run_pipeline.py --dataset simulation2
+python run_pipeline.py --dataset simulation3
+python run_pipeline.py --dataset simulation4
+python run_pipeline.py --dataset simulation5
+```
 
-- 根目录仍保留同名启动脚本（如 `run_pipeline.py`、`run_train.py`），它们会转发到 `scripts/` 下的实现。
-- 因此你现有命令无需修改。
+只跑预处理和训练：
 
--- `configs/config_human.yaml`
--- `configs/config_mouse.yaml`
--- `configs/renal/config_renal_R114_T.yaml`
--- `configs/renal/config_renal_Y7_T.yaml`
+```bash
+python run_pipeline.py --dataset simulation1 --steps preprocess,train
+python run_pipeline.py --dataset simulation2 --steps preprocess,train
+python run_pipeline.py --dataset simulation3 --steps preprocess,train
+python run_pipeline.py --dataset simulation4 --steps preprocess,train
+python run_pipeline.py --dataset simulation5 --steps preprocess,train
+```
+
+## Human 数据集命令
+
+```bash
+python run_pipeline.py --dataset human
+python run_pipeline.py --dataset human --steps preprocess
+python run_pipeline.py --dataset human --steps train
+python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/config_human.yaml run_preprocess.py
+./run_deterministic.sh configs/config_human.yaml run_train.py
+./run_deterministic.sh configs/config_human.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+## 范围评估命令
+
+范围评估用于批量评估一段 checkpoint，例如 800 到 1500，每 100 轮评估一次：
+
+```bash
+python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
+python run_evaluate_range.py --config configs/e11_0_s1/config_misar_e11_0_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
+python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --resolution 0.9
+```
+
+常用参数：
+
+- `--start` / `--end` / `--step`：评估轮次范围。
+- `--checkpoint`：单次评估指定权重。
+- `--best-epoch`：范围评估后指定额外输出图的轮次。
+- `--n-clusters`：mclust 聚类数。
+- `--resolution`：Leiden 分辨率。
+
+## 翻译模块命令
+
+翻译模块是 Stage 2 / Stage 3.5，主要入口是：
+
+- 训练：`run_train_translator.py`
+- 评估：`evaluate_translation.py`
+
+### 训练翻译器
+
+默认推荐使用目标切片的 S2 配置统一驱动翻译训练。训练数据来源、主干来源、loss 权重和保存文件名由 YAML 的 `translation.stage2` 控制。
+
+```bash
+python run_train_translator.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
+```
+
+覆盖 YAML 参数：
+
+```bash
+python run_train_translator.py \
+  --config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+  --backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+  --backbone-checkpoint 2100 \
+  --epochs 400 \
+  --lr 1e-4 \
+  --n-blocks 3 \
+  --lambda-cosine 1.0 \
+  --lambda-mse 1.0 \
+  --lambda-recon 1.0
+```
+
+输出默认保存在：
+
+```text
+<project.save_dir>/translator_checkpoints/
+```
+
+### 评估翻译器
+
+Stage 3.5 评估会输出 Lower / Translated / Upper 三组对照指标，包括 ARI / NMI / AMI / HOM / Cluster Moran's I。
+
+```bash
+python evaluate_translation.py --config configs/e18_5_s2/config_misar_e18_5_s2.yaml
+```
+
+覆盖 YAML 参数：
+
+```bash
+python evaluate_translation.py \
+  --config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+  --backbone-config configs/e18_5_s1/config_misar_e18_5_s1.yaml \
+  --backbone-checkpoint 2100 \
+  --translator-checkpoint results/misar/misar_e18-5-s2/checkpoints/translator_checkpoints/translator_r2a_best.pth \
+  --n-clusters 14 \
+  --pca-dim 20 \
+  --moran-k 6
+```
+
+评估汇总默认输出到 `project.eval_dir` 下：
+
+```text
+translation_eval_stage35.csv
+```
+
+## 融合模块命令
+
+融合模块入口是：
+
+```text
+scripts/pipeline/run_evaluate_translator_fusion.py
+```
+
+它会加载目标切片数据、冻结主干模型、加载训练好的翻译器，然后执行 RNA -> Translator -> SFIB Fusion 的推理和评估。
+
+### 翻译后融合评估
+
+```bash
+python -m scripts.pipeline.run_evaluate_translator_fusion \
+  --config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+  --backbone-checkpoint results/misar/misar_e18-5-s1/checkpoints/ckpt_best.pth \
+  --translator-checkpoint results/misar/misar_e18-5-s2/checkpoints/translator_checkpoints/translator_r2a_best.pth \
+  --n-clusters 14
+```
+
+如需使用具体轮次权重，把 `--backbone-checkpoint` 改成对应的 `.pth` 文件路径：
+
+```bash
+python -m scripts.pipeline.run_evaluate_translator_fusion \
+  --config configs/e18_5_s2/config_misar_e18_5_s2.yaml \
+  --backbone-checkpoint results/misar/misar_e18-5-s1/checkpoints/ckpt_2100.pth \
+  --translator-checkpoint results/misar/misar_e18-5-s2/checkpoints/translator_checkpoints/translator_r2a_best.pth \
+  --n-clusters 14
+```
+
+## 配置文件索引
+
+数据集映射位于 `scripts/pipeline/run_pipeline.py` 的 `DATASET_CONFIG`。
+
+常用配置：
+
+- `configs/config_human.yaml`
+- `configs/config_mouse_brain_p22.yaml`
+- `configs/renal/config_renal_R114_T.yaml`
+- `configs/renal/config_renal_Y7_T.yaml`
 - `configs/e11_0_s1/config_misar_e11_0_s1.yaml`
 - `configs/e11_0_s2/config_misar_e11_0_s2.yaml`
 - `configs/e13_5_s1/config_misar_e13_5_s1.yaml`
@@ -232,13 +383,30 @@ python run_evaluate_range_p22.py --start 2500 --end 2600 --step 100
 - `configs/e15_5_s2/config_misar_e15_5_s2.yaml`
 - `configs/e18_5_s1/config_misar_e18_5_s1.yaml`
 - `configs/e18_5_s2/config_misar_e18_5_s2.yaml`
-- `configs/e18_5_s1/config_misar_e18.yaml`（兼容别名配置，指向 e18_5_s1）
+- `configs/e18_5_s1/config_misar_e18.yaml`
+
+评估专用配置：
+
+- `configs/e11_0_s1/config_eval_pca30.yaml`
+
+调参记录和模板：
+
+- `TUNING_NL_PROMPT_TEMPLATE.md`
+- `results/e11_0_s1/experiments_global.csv`
+- `results/e13_5_s1/experiments_global.csv`
+- `results/e15_5_s1/experiments_global.csv`
 
 ## 目录约定
 
-- MISAR 原始数据：`data/raw/misar/<dataset>/`
-- 数据集隔离调优配置：`configs/<dataset_tag>/config_tune_*.yaml`
-- 数据集隔离预处理产物：`data/processed/<dataset_tag>/tuning/<trial_id>/`
-- 数据集隔离结果输出：`results/<dataset_tag>/tuning/<trial_id>/`
-- e18.5 历史调优结果：`results/e18_5_s1/tuning/`
-- 全局实验追踪：`results/experiments_global.csv`
+- 原始数据：`data/raw/<dataset_group>/`
+- 预处理产物：`data/processed/<dataset_tag>/`
+- checkpoint：`results/<dataset_tag>/checkpoints/` 或 `results/misar/<dataset_tag>/checkpoints/`
+- 评估图和 h5ad：`project.eval_dir`
+- 翻译器权重：`<project.save_dir>/translator_checkpoints/`
+- 训练日志：`<project.save_dir>/train.log`
+
+## 脚本目录
+
+- `scripts/pipeline/`：预处理、训练、评估、范围评估、翻译训练、翻译评估、融合评估。
+- `scripts/diagnostics/`：诊断脚本。
+- `sf_model/`：模型、训练器、预处理和工具函数。

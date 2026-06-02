@@ -9,10 +9,21 @@ import yaml
 # 数据集到配置文件的映射，新增数据集时在此注册
 DATASET_CONFIG = {
     "human": "configs/config_human.yaml",
+    "human_lymph_A1": "configs/human_lymph/config_human_lymph_A1.yaml",
+    "human_lymph1": "configs/human_lymph/config_human_lymph1.yaml",
+    "human_lymph2": "configs/human_lymph/config_human_lymph2.yaml",
+    "human_lymph3": "configs/human_lymph/config_human_lymph3.yaml",
     "mouse": "configs/config_mouse.yaml",
-    "mouse_brain_p22": "configs/config_mouse_brain_p22.yaml",
-    # renal 原先为单一数据集，已拆分为 R114_T 与 Y7_T
-    "renal": "configs/renal/config_renal_R114_T.yaml",
+    "mouse_brain_ATAC": "configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml",
+    "mouse_brain_H3K27ac": "configs/mouse_brain_p22/config_mouse_brain_H3K27ac.yaml",
+    "mouse_brain_H3K27me3": "configs/mouse_brain_p22/config_mouse_brain_H3K27me3.yaml",
+    "mouse_brain_H3K4me3": "configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml",
+    "mouse_spleen1": "configs/mouse_spleen/config_mouse_spleen1.yaml",
+    "mouse_spleen2": "configs/mouse_spleen/config_mouse_spleen2.yaml",
+    "mouse_thymus1": "configs/mouse_thymus/config_mouse_thymus1.yaml",
+    "mouse_thymus2": "configs/mouse_thymus/config_mouse_thymus2.yaml",
+    "mouse_thymus3": "configs/mouse_thymus/config_mouse_thymus3.yaml",
+    "mouse_thymus4": "configs/mouse_thymus/config_mouse_thymus4.yaml",
     "R114_T": "configs/renal/config_renal_R114_T.yaml",
     "Y7_T": "configs/renal/config_renal_Y7_T.yaml",
     "misar_e11_0_s1": "configs/e11_0_s1/config_misar_e11_0_s1.yaml",
@@ -44,6 +55,7 @@ def parse_args():
     )
     parser.add_argument("--checkpoint", default=None, help="评估阶段使用的 checkpoint key 或文件名，可选")
     parser.add_argument("--n-clusters", type=int, default=None, help="评估阶段 mclust 聚类簇数，可选")
+    parser.add_argument("--mclust-pca-dim", type=int, default=None, help="评估阶段 mclust 前 PCA 维度，可选")
     parser.add_argument("--resolution", type=float, default=None, help="评估阶段 Leiden 分辨率，可选")
     return parser.parse_args()
 
@@ -152,6 +164,8 @@ def main():
             eval_cmd.extend(["--checkpoint", args.checkpoint])
         if args.n_clusters is not None:
             eval_cmd.extend(["--n-clusters", str(args.n_clusters)])
+        if args.mclust_pca_dim is not None:
+            eval_cmd.extend(["--mclust-pca-dim", str(args.mclust_pca_dim)])
         if args.resolution is not None:
             eval_cmd.extend(["--resolution", str(args.resolution)])
         steps.append(("Evaluate", eval_cmd))

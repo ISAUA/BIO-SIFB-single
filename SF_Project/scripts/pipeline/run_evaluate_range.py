@@ -32,6 +32,7 @@ import scanpy as sc
 import squidpy as sq
 import torch
 import yaml
+from scipy.interpolate import splprep, splev
 from sklearn.metrics import (
     adjusted_mutual_info_score,
     adjusted_rand_score,
@@ -39,6 +40,7 @@ from sklearn.metrics import (
     normalized_mutual_info_score,
 )
 from sklearn.decomposition import PCA
+from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 
 from sf_model.model.bio_sfinet import BioSFINet
 from sf_model.utils import set_seed
@@ -57,6 +59,7 @@ def parse_args():
     parser.add_argument("--step", type=int, default=100, help="Epoch step")
     parser.add_argument("--best-epoch", type=int, default=2000, help="Use best checkpoint when epoch equals this value")
     parser.add_argument("--n-clusters", type=int, default=None, help="Number of clusters for mclust (override config)")
+    parser.add_argument("--mclust-pca-dim", type=int, default=None, help="PCA dimension before mclust (override config)")
     parser.add_argument("--resolution", type=float, default=None, help="Leiden resolution (used for metabolomics eval)")
     return parser.parse_args()
 
@@ -206,6 +209,152 @@ def calculate_clustering_scores(cluster_labels, ground_truth):
     }
 
 
+def _get_cluster_color_map(adata, cluster_key="cluster"):
+    colors = adata.uns.get(f"{cluster_key}_colors", None)
+    if not colors:
+        return {}
+    categories = list(adata.obs[cluster_key].cat.categories)
+    return {
+        str(cat): colors[i]
+        for i, cat in enumerate(categories)
+        if i < len(colors)
+    }
+
+
+def _draw_cluster_outlines(ax, coords, labels, outline_cfg=None, color_map=None):
+    outline_cfg = outline_cfg or {}
+    min_points = int(outline_cfg.get("min_points", 10))
+    line_width = float(outline_cfg.get("line_width", 3.0))
+    line_alpha = float(outline_cfg.get("alpha", 0.8))
+    default_color = str(outline_cfg.get("color", "#000000"))
+    use_cluster_colors = bool(outline_cfg.get("use_cluster_colors", True))
+    circle_fallback = bool(outline_cfg.get("circle_fallback", True))
+
+    x_range = coords[:, 0].max() - coords[:, 0].min()
+    y_range = coords[:, 1].max() - coords[:, 1].min()
+    max_range = max(x_range, y_range)
+
+    unique_labels = np.unique(labels)
+    for cluster_id in unique_labels:
+        mask = labels == cluster_id
+        pts = coords[mask]
+        if pts.shape[0] < min_points:
+            continue
+
+        color = default_color
+        if use_cluster_colors and color_map is not None:
+            color = color_map.get(str(cluster_id), default_color)
+
+        try:
+            buffer_ratio = float(outline_cfg.get("buffer_ratio", 0.02))
+            buffer_dist = max_range * buffer_ratio
+
+            min_cells_per_island = float(outline_cfg.get("min_cells_per_island", 3.0))
+            min_area = np.pi * (buffer_dist * 0.5) ** 2 * min_cells_per_island
+
+            mp = MultiPoint(pts)
+
+            buffer_res = int(outline_cfg.get("buffer_res", 64))
+
+            buffered = mp.buffer(buffer_dist, resolution=buffer_res)
+            buffered = buffered.buffer(-buffer_dist * 0.8, resolution=buffer_res)
+
+            smooth_ratio = float(outline_cfg.get("smooth_ratio", 0.2))
+            if smooth_ratio > 0:
+                smooth_dist = buffer_dist * smooth_ratio
+                buffered = buffered.buffer(smooth_dist, resolution=buffer_res).buffer(
+                    -smooth_dist, resolution=buffer_res
+                )
+
+            drawn_any = False
+
+            def plot_poly(poly, axis, col, lw, alp):
+                nonlocal drawn_any
+                if poly.is_empty or poly.area < min_area:
+                    return
+                if poly.geom_type == "Polygon":
+                    x, y = poly.exterior.xy
+                elif poly.geom_type in ["LineString", "LinearRing"]:
+                    x, y = poly.xy
+                else:
+                    return
+
+                x = np.array(x)
+                y = np.array(y)
+
+                if len(x) > 4:
+                    try:
+                        tck, u = splprep([x, y], s=0.0, per=True)
+                        u_new = np.linspace(u.min(), u.max(), 500)
+                        x, y = splev(u_new, tck)
+                    except Exception:
+                        pass
+
+                axis.plot(x, y, color=col, linewidth=lw, alpha=alp)
+                drawn_any = True
+
+            if isinstance(buffered, Polygon):
+                plot_poly(buffered, ax, color, line_width, line_alpha)
+            elif isinstance(buffered, MultiPolygon):
+                for geom in buffered.geoms:
+                    plot_poly(geom, ax, color, line_width, line_alpha)
+
+            if not drawn_any:
+                raise ValueError("All islands were filtered out as small noise.")
+        except Exception:
+            if not circle_fallback:
+                continue
+            center = pts.mean(axis=0)
+            radius = float(np.max(np.linalg.norm(pts - center, axis=1)))
+            circle = plt.Circle(
+                (float(center[0]), float(center[1])),
+                radius,
+                fill=False,
+                color=color,
+                linewidth=line_width,
+                alpha=line_alpha,
+            )
+            ax.add_patch(circle)
+
+
+def rotate_spatial_coords(coords, degrees):
+    """Rotate spatial coords around their centroid; positive degrees rotate clockwise."""
+    if degrees is None:
+        return coords
+    try:
+        deg = float(degrees)
+    except (TypeError, ValueError):
+        return coords
+    if abs(deg) < 1e-6:
+        return coords
+
+    rad = -deg * np.pi / 180.0
+    cos_v = float(np.cos(rad))
+    sin_v = float(np.sin(rad))
+
+    center = np.mean(coords, axis=0)
+    shifted = coords - center
+    rotated = np.empty_like(shifted)
+    rotated[:, 0] = shifted[:, 0] * cos_v - shifted[:, 1] * sin_v
+    rotated[:, 1] = shifted[:, 0] * sin_v + shifted[:, 1] * cos_v
+    return rotated + center
+
+
+def flip_spatial_coords(coords, flip_x=False, flip_y=False):
+    """Flip spatial coords around centroid along axes for plotting only."""
+    if not flip_x and not flip_y:
+        return coords
+
+    center = np.mean(coords, axis=0)
+    shifted = coords - center
+    flipped = shifted.copy()
+    if flip_x:
+        flipped[:, 0] = -flipped[:, 0]
+    if flip_y:
+        flipped[:, 1] = -flipped[:, 1]
+    return flipped + center
+
+
 def compute_score(cluster_moran, cluster_scores):
     if cluster_moran is None or cluster_scores is None:
         return None
@@ -264,6 +413,15 @@ def visualize_and_save(
 
     adata = sc.AnnData(X=z_final)
     coords_plot = coords.copy()
+    coords_moran = coords.copy()
+
+    plot_cfg = plot_cfg or {}
+    coords_plot = rotate_spatial_coords(coords_plot, plot_cfg.get("spatial_rotate_deg"))
+    coords_plot = flip_spatial_coords(
+        coords_plot,
+        flip_x=bool(plot_cfg.get("spatial_flip_x", False)),
+        flip_y=bool(plot_cfg.get("spatial_flip_y", False)),
+    )
     adata.obsm["spatial"] = coords_plot
 
     sc.pp.neighbors(adata, use_rep="X", random_state=int(seed))
@@ -316,11 +474,11 @@ def visualize_and_save(
         cluster_labels = adata.obs["cluster"].values.astype(int)
 
         if moran_mode == "both":
-            mi_latent_avg, _ = calculate_spatial_morans_i(coords_plot, z_final, k=moran_k)
+            mi_latent_avg, _ = calculate_spatial_morans_i(coords_moran, z_final, k=moran_k)
             if precomputed_cluster_moran is None:
                 num_clusters = np.max(cluster_labels) + 1
                 one_hot_clusters = np.eye(num_clusters)[cluster_labels]
-                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
+                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_moran, one_hot_clusters, k=moran_k)
             else:
                 mi_cluster_avg = float(precomputed_cluster_moran)
 
@@ -332,7 +490,7 @@ def visualize_and_save(
             if precomputed_cluster_moran is None:
                 num_clusters = np.max(cluster_labels) + 1
                 one_hot_clusters = np.eye(num_clusters)[cluster_labels]
-                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_plot, one_hot_clusters, k=moran_k)
+                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_moran, one_hot_clusters, k=moran_k)
             else:
                 mi_cluster_avg = float(precomputed_cluster_moran)
 
@@ -388,6 +546,27 @@ def visualize_and_save(
         alpha=alpha,
         edges=False,
     )
+
+    outline_cfg = plot_cfg.get("cluster_outline", {})
+    outline_enable = False
+    if isinstance(outline_cfg, bool):
+        outline_enable = outline_cfg
+        outline_cfg = {}
+    elif isinstance(outline_cfg, dict):
+        outline_enable = bool(outline_cfg.get("enable", False))
+    else:
+        outline_cfg = {}
+
+    if outline_enable:
+        labels = adata.obs["cluster"].astype(str).to_numpy()
+        color_map = _get_cluster_color_map(adata, "cluster")
+        _draw_cluster_outlines(
+            axs[1],
+            coords_plot,
+            labels,
+            outline_cfg=outline_cfg,
+            color_map=color_map,
+        )
 
     for ax in axs:
         ax.tick_params(left=False, bottom=False, labelleft=False, labelbottom=False)
@@ -505,7 +684,7 @@ def main():
     n_clusters = int(args.n_clusters if args.n_clusters is not None else eval_cfg.get("n_clusters", 7))
     cluster_method = resolve_cluster_method(config, eval_cfg)
     compute_gt_metrics = bool(eval_cfg.get("compute_gt_metrics", True))
-    mclust_pca_dim = int(eval_cfg.get("mclust_pca_dim", 20))
+    mclust_pca_dim = int(args.mclust_pca_dim if args.mclust_pca_dim is not None else eval_cfg.get("mclust_pca_dim", 20))
     resolution = float(args.resolution if args.resolution is not None else eval_cfg.get("resolution", 0.9))
     moran_k = int(eval_cfg.get("moran_k", 6))
     plot_cfg = eval_cfg.get("plotting", {})
@@ -544,6 +723,7 @@ def main():
     model = BioSFINet(config, atac_dim=atac_dim).to(device)
     model.eval()
     logger.info("Clustering method: %s", cluster_method)
+    logger.info("mclust PCA dim: %d", mclust_pca_dim)
 
     success = 0
     failed = 0
@@ -552,9 +732,9 @@ def main():
     for epoch in epochs:
         ckpt_name = resolve_checkpoint_name(eval_cfg, epoch, args.best_epoch)
         ckpt_path = os.path.join(save_dir, ckpt_name)
-        suffix = f"epoch_{epoch}"
+        suffix = f"epoch_{epoch}_pca{mclust_pca_dim}"
         if epoch == args.best_epoch:
-            suffix = f"epoch_{epoch}_best"
+            suffix = f"epoch_{epoch}_best_pca{mclust_pca_dim}"
         is_loss_best_row = int(epoch == args.best_epoch)
 
         logger.info("Evaluating epoch %d with %s", epoch, ckpt_name)
@@ -649,7 +829,7 @@ def main():
     os.makedirs(pred_dir, exist_ok=True)
     csv_path = os.path.join(
         pred_dir,
-        f"range_metrics_start{args.start}_end{args.end}_step{args.step}.csv",
+        f"range_metrics_start{args.start}_end{args.end}_step{args.step}_pca{mclust_pca_dim}.csv",
     )
     records_df = pd.DataFrame(
         records,

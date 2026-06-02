@@ -45,12 +45,25 @@ def _assert_finite(X, stage):
         raise ValueError(f"ADT matrix contains NaN/Inf after {stage}.")
 
 
-def process_adt_pipeline(adata, apply_clr=False, apply_scale=False):
+def _clip_nonnegative(X):
+    if sp.issparse(X):
+        X = X.tocsr(copy=True)
+        X.data[X.data < 0] = 0.0
+        X.eliminate_zeros()
+        return X
+    return np.maximum(np.asarray(X, dtype=np.float32), 0.0).astype(np.float32)
+
+
+def process_adt_pipeline(adata, apply_clr=False, apply_scale=False, clip_nonnegative=True):
     if adata.shape[1] == 0:
         return adata
 
     adata.X = _to_dense_float32(adata.X)
     _assert_finite(adata.X, "loading")
+
+    if clip_nonnegative:
+        adata.X = _clip_nonnegative(adata.X)
+        _assert_finite(adata.X, "nonnegative clipping before CLR")
 
     if apply_clr:
         # CLR is optional; only run when explicitly enabled.
@@ -63,5 +76,9 @@ def process_adt_pipeline(adata, apply_clr=False, apply_scale=False):
         sc.pp.scale(adata, zero_center=True)
         adata.X = np.asarray(adata.X, dtype=np.float32)
         _assert_finite(adata.X, "scale")
+
+    if clip_nonnegative:
+        adata.X = _clip_nonnegative(adata.X)
+        _assert_finite(adata.X, "final nonnegative clipping")
 
     return adata

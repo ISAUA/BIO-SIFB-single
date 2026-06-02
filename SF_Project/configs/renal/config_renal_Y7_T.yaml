@@ -6,7 +6,7 @@ project:                              # 项目级配置
   eval_dir: "./results/Y7_T/predictions/"   # 评估输出目录
 
 eval:                                 # 评估配置
-  checkpoint: "1500"                 # 默认评估 checkpoint key
+  checkpoint: "ckpt_1500.pth"        # 默认评估 checkpoint 文件名
   cluster_method: "mclust"           # 代谢组评估固定使用 Leiden
   n_clusters: 11                      # mclust 聚类簇数（仅非代谢组评估使用）
   mclust_pca_dim: 20                  # mclust 前 PCA 维度（仅非代谢组评估使用）
@@ -24,12 +24,21 @@ eval:                                 # 评估配置
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
     final: "ckpt_1500.pth"            # 最终/指定轮次 checkpoint 文件名
+  plotting:
+    cluster_outline:
+      enable: true
+      min_points: 10
+      line_width: 1.5
+      alpha: 0.8
+      use_cluster_colors: true
+      color: "#000000"
+      circle_fallback: true
 
 data:                                 # 数据配置
   raw_path: "data/raw/renal/Y7_T"          # 原始数据目录（Y7_T 子文件夹）
   processed_path: "data/processed/renal"  # 预处理输出目录
   files:                              # 原始文件定义
-    rna_h5ad: "adata_ST_Y7_T_with_labels.h5ad"   # RNA h5ad 文件名
+    rna_h5ad: "adata_SM_Y7_T.h5ad"   # RNA h5ad 文件名
   parameters:                         # 预处理超参数
     reduce:                           # 降维加速设置
       mode: "cpu"                    # cpu|gpu_safe|gpu_full（默认稳定优先）
@@ -54,7 +63,7 @@ data:                                 # 数据配置
 # ------------------------------------------
 # 1.5 代谢组 (SM) 专用配置
 # ------------------------------------------
-sm_data_path: "adata_SM_Y7_T_with_labels.h5ad"  # 代谢组 h5ad 路径（相对 raw_path）
+sm_data_path: "adata_ST_Y7_T.h5ad"  # 代谢组 h5ad 路径（相对 raw_path）
 sm_preprocess:
   replace_atac: true                 # 使用 SM 替换 ATAC 模态
   target_sum: 1e4                    # TIC 归一化目标总和

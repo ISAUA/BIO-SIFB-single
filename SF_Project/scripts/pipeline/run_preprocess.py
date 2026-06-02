@@ -68,7 +68,7 @@ def infer_ground_truth_key(obs_df, preferred_key=None):
         return preferred_key
 
     candidates = [
-        'ground_truth', 'groundtruth', 'gt',
+        'ground_truth', 'groundtruth', 'gt', 'true_label',
         'combined_clusters', 'combined_cluster',
         'combined_clusters_annotation', 'cluster', 'clusters',
         'cell_type', 'celltype', 'annotation', 'annot', 'label', 'labels',
@@ -268,6 +268,7 @@ def main():
     adt_data_path = adt_pre_cfg.get('adt_data_path', None)
     adt_apply_clr = bool(adt_pre_cfg.get('apply_clr', False))
     adt_apply_scale = bool(adt_pre_cfg.get('apply_scale', False))
+    adt_clip_nonnegative = bool(adt_pre_cfg.get('clip_nonnegative', True))
     
     os.makedirs(processed_dir, exist_ok=True)
 
@@ -423,10 +424,11 @@ def main():
     # ---------------------------------------------------------------
     # default_* used for standard loaders only
     default_rna_h5ad = os.path.join(raw_dir, "adata_RNA.h5ad")
-    default_atac_h5ad = os.path.join(raw_dir, "adata_Peak.h5ad")
+    default_atac_h5ad = os.path.join(raw_dir, "adata_ATAC.h5ad")
+    legacy_atac_h5ad = os.path.join(raw_dir, "adata_Peak.h5ad")
     has_pair_h5ad = (
         ('rna_h5ad' in files and 'atac_h5ad' in files) or
-        (os.path.exists(default_rna_h5ad) and os.path.exists(default_atac_h5ad))
+        (os.path.exists(default_rna_h5ad) and (os.path.exists(default_atac_h5ad) or os.path.exists(legacy_atac_h5ad)))
     )
 
     if use_adt:
@@ -436,7 +438,10 @@ def main():
     elif has_pair_h5ad:
         logger.info("Data loader: paired h5ad")
         rna_h5ad = os.path.join(raw_dir, files.get('rna_h5ad', 'adata_RNA.h5ad'))
-        atac_h5ad = os.path.join(raw_dir, files.get('atac_h5ad', 'adata_Peak.h5ad'))
+        atac_h5ad = os.path.join(
+            raw_dir,
+            files.get('atac_h5ad', 'adata_ATAC.h5ad' if os.path.exists(default_atac_h5ad) else 'adata_Peak.h5ad')
+        )
         adata_rna, adata_atac = read_h5ad_rna_atac(rna_h5ad, atac_h5ad)
     elif 'h5_matrix' in files and 'spatial_csv' in files:
         logger.info("Data loader: 10x h5 + spatial csv")
@@ -561,6 +566,7 @@ def main():
                 adata_atac,
                 apply_clr=adt_apply_clr,
                 apply_scale=adt_apply_scale,
+                clip_nonnegative=adt_clip_nonnegative,
             )
         elif sm_replace_atac:
             logger.info("ATAC preprocessing skipped (SM replace_atac enabled)")
@@ -580,6 +586,24 @@ def main():
                 target_sum=atac_target_sum,
                 tfidf_eps=tfidf_eps,
             )
+
+            gtf_stats = adata_atac.uns.get("gtf_filter_stats", None)
+            if gtf_stats:
+                logger.info(
+                    "GTF filter stats | gtf=%s | window=%s | rna_genes=%s | matched_genes=%s | "
+                    "peaks_before=%s | peaks_valid=%s | peaks_retained=%s | peaks_after_downsample=%s | "
+                    "fallback_used=%s | status=%s",
+                    gtf_stats.get("gtf_path"),
+                    gtf_stats.get("window"),
+                    gtf_stats.get("rna_gene_count"),
+                    gtf_stats.get("matched_gene_count"),
+                    gtf_stats.get("peaks_before"),
+                    gtf_stats.get("peaks_valid"),
+                    gtf_stats.get("peaks_retained"),
+                    gtf_stats.get("peaks_after_downsample"),
+                    gtf_stats.get("fallback_used"),
+                    gtf_stats.get("status"),
+                )
 
             # S1 fit&save mode: persist selected feature lists for cross-domain hard alignment.
             if fit_save_mode:

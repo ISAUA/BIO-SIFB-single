@@ -6,7 +6,7 @@ project:                              # 项目级配置
   eval_dir: "./results/misar/misar_e18-5-s2/predictions/"   # 评估输出目录
 
 eval:                                 # 评估配置
-  checkpoint: "1500"                 # 默认评估 checkpoint key
+  checkpoint: "ckpt_1500.pth"        # 默认评估 checkpoint 文件名
   n_clusters: 16                      # mclust 聚类簇数（点位数）
   mclust_pca_dim: 20                  # mclust 前 PCA 维度
   resolution: 0.9                     # Leiden 分辨率（mclust失败回退时使用）
@@ -30,7 +30,7 @@ translation:                          # 翻译专项配置（Stage 2 / Stage 3.5
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # Stage2 训练用 S1 切片数据
     backbone:                         # 冻结主干来源（通常指向 S1）
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
-      checkpoint: "1500"             # 主干 checkpoint key 或文件名
+      checkpoint: "ckpt_1500.pth"    # 主干 checkpoint 文件名
     model:                            # 翻译器结构
       n_blocks: 3                     # SF_Translator_R2A 残差 MLP 层数
       hidden_dim: 128                 # 翻译器隐层维度（默认与 sfib_dim 一致）
@@ -48,7 +48,7 @@ translation:                          # 翻译专项配置（Stage 2 / Stage 3.5
   stage35:                            # 翻译评估
     backbone:                         # 评估时冻结主干来源
       config: "configs/e18_5_s1/config_misar_e18_5_s1.yaml"  # 主干配置位置
-      checkpoint: "1500"             # 主干 checkpoint key 或文件名
+      checkpoint: "ckpt_1500.pth"    # 主干 checkpoint 文件名
     metrics:                          # 评估指标参数
       n_clusters: 14                  # mclust 目标簇数
       pca_dim: 20                     # mclust 前 PCA 维度
@@ -63,7 +63,7 @@ data:                                 # 数据配置
   files:                              # 原始文件定义
     rna_h5ad: "adata_RNA.h5ad"        # RNA h5ad 文件名
     atac_h5ad: "adata_Peak.h5ad"      # ATAC h5ad 文件名
-    gtf: "../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
+    gtf: "../../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
   parameters:                         # 预处理超参数
     reduce:                         # 降维加速设置
       mode: "cpu"            # cpu|gpu_safe|gpu_full（默认稳定优先）

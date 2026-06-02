@@ -1,105 +1,105 @@
-project:
-  name: SF_MISAR_E11_0_S1_eval_pca30
-  version: 1.0.0
-  seed: 42
-  save_dir: ./results/misar/misar_e11_0-s1/checkpoints/
-  eval_dir: ./results/misar/misar_e11_0-s1/predictions/
-eval:
-  checkpoint: best
-  n_clusters: 7
-  mclust_pca_dim: 30
-  resolution: 0.9
-  moran_k: 6
-  plotting:
-    figure_dpi: 180
-    figure_size:
+project:                              # 项目级配置
+  name: SF_MISAR_E11_0_S1_eval_pca30  # 项目名称
+  version: 1.0.0                     # 配置版本
+  seed: 42                            # 随机种子
+  save_dir: ./results/misar/misar_e11_0-s1/checkpoints/  # 训练 checkpoint 输出目录
+  eval_dir: ./results/misar/misar_e11_0-s1/predictions/  # 评估输出目录
+eval:                                 # 评估配置
+  checkpoint: best                    # 默认评估 checkpoint key
+  n_clusters: 7                       # mclust 聚类簇数
+  mclust_pca_dim: 30                  # mclust 前 PCA 维度
+  resolution: 0.9                     # Leiden 分辨率
+  moran_k: 6                          # Moran's I 邻居数
+  plotting:                           # 绘图参数
+    figure_dpi: 180                   # 绘图 DPI
+    figure_size:                      # 总画布尺寸
     - 14
     - 6
-    panel_size:
+    panel_size:                       # 单面板尺寸
     - 6
     - 6
-    umap_point_size: 60
-    spatial_point_size: 80
-    alpha: 1.0
-    legend_loc: on data
-    palette_mode: high_contrast
-  checkpoints:
-    best: ckpt_best.pth
-    final: ckpt_300.pth
-data:
-  raw_path: data/raw/misar/misar_e11_0-s1
-  processed_path: data/processed/misar/misar_e11_0-s1
-  files:
-    rna_h5ad: adata_RNA.h5ad
-    atac_h5ad: adata_Peak.h5ad
-    gtf: ../gencode.vM23.annotation.gtf.gz
-  parameters:
-    reduce:
-      mode: cpu
-      device: auto
-      q_offset: 8
-      niter: 3
-    n_top_genes: 3000
-    rna_pca_dim: 512
-    rna_min_cells: 3
-    rna_target_sum: 1e4
-    n_global_peaks: 50000
-    n_final_peaks: 30000
-    atac_pca_dim: 512
-    atac_min_cells: 50
-    atac_target_sum: 1e4
-    tfidf_eps: 1e-6
-    tss_window: 150000
-    knn_k: 9
-    use_rna_similarity_edge_weight: false
-    ground_truth_key: Combined_Clusters
-model:
-  name: SFNet
-  n_freq_components: 3000
-  rna_in_dim: 3000
-  hidden_dim: 512
-  rna_n_heads: 4
-  rna_dropout: 0.1
-  atac_dropout: 0.1
-  n_heads: 4
-  dropout: 0.1
-  grid_size: 128
-  latent_dim: 50
-  sfib_dim: 128
-  sfib_ino_layers: 2
-  ino_use_edge_weight: true
-  ino_pre_smooth_enable: false
-  ino_pre_smooth_alpha: 0.7
-  proj_hidden_dim: 64
-  proj_output_dim: 64
-  rna_dec_hidden: 512
-  rna_dec_blocks: 1
-  atac_dec_hidden: 512
-  atac_dec_blocks: 1
-  sfib_debug_mode: false
-  model.sfib_debug_epochs:
+    umap_point_size: 60               # UMAP 点大小
+    spatial_point_size: 80            # Spatial 点大小
+    alpha: 1.0                        # 点透明度
+    legend_loc: on data               # 图例位置
+    palette_mode: high_contrast       # 调色板模式
+  checkpoints:                        # checkpoint 映射表
+    best: ckpt_best.pth               # 最优 checkpoint 文件名
+    final: ckpt_300.pth               # 最终/指定轮次 checkpoint 文件名
+data:                                 # 数据配置
+  raw_path: data/raw/misar/misar_e11_0-s1    # 原始数据目录
+  processed_path: data/processed/misar/misar_e11_0-s1  # 预处理输出目录
+  files:                              # 原始文件定义
+    rna_h5ad: adata_RNA.h5ad          # RNA h5ad 文件名
+    atac_h5ad: adata_Peak.h5ad        # ATAC h5ad 文件名
+    gtf: ../../gencode.vM23.annotation.gtf.gz # GTF 注释文件
+  parameters:                         # 预处理超参数
+    reduce:                           # 降维加速设置
+      mode: cpu                       # cpu|gpu_safe|gpu_full（默认稳定优先）
+      device: auto                    # auto|cuda|cpu
+      q_offset: 8                     # 低秩分解冗余维度
+      niter: 3                        # 低秩迭代次数
+    n_top_genes: 3000                 # RNA 高变基因数
+    rna_pca_dim: 512                  # RNA 降维维度
+    rna_min_cells: 3                  # RNA 基因最小细胞数过滤
+    rna_target_sum: 1e4               # RNA 归一化目标总和
+    n_global_peaks: 50000             # ATAC 初筛峰数
+    n_final_peaks: 30000              # ATAC 最终保留峰数
+    atac_pca_dim: 512                 # ATAC 降维维度
+    atac_min_cells: 50                # ATAC 峰最小细胞数过滤
+    atac_target_sum: 1e4              # ATAC 归一化目标总和
+    tfidf_eps: 1e-6                   # TF-IDF 平滑项
+    tss_window: 150000                # TSS 上下游窗口(bp)
+    knn_k: 9                          # 空间图 k 近邻
+    use_rna_similarity_edge_weight: false  # 是否启用基于 RNA 相似度的边权重
+    ground_truth_key: Combined_Clusters    # 真实标签列名
+model:                                # 模型结构配置
+  name: SFNet                         # 模型名称
+  n_freq_components: 3000             # 高频傅里叶特征数
+  rna_in_dim: 3000                    # RNA 输入维度
+  hidden_dim: 512                     # 主干隐藏维度
+  rna_n_heads: 4                      # RNA 分支注意力头数
+  rna_dropout: 0.1                    # RNA 分支 dropout
+  atac_dropout: 0.1                   # ATAC 分支 dropout
+  n_heads: 4                          # 通用注意力头数
+  dropout: 0.1                        # 通用 dropout
+  grid_size: 128                      # 网格大小
+  latent_dim: 50                      # 潜变量维度
+  sfib_dim: 128                       # SFIB 特征维度
+  sfib_ino_layers: 2                  # SFIB INO 层数
+  ino_use_edge_weight: true           # INO 是否使用边权重
+  ino_pre_smooth_enable: false        # INO 前是否启用预平滑
+  ino_pre_smooth_alpha: 0.7           # 预平滑保真系数 alpha
+  proj_hidden_dim: 64                 # 对比投影头隐藏维度
+  proj_output_dim: 64                 # 对比投影头输出维度
+  rna_dec_hidden: 512                 # RNA 解码器隐藏维度
+  rna_dec_blocks: 1                   # RNA 解码器残差块数
+  atac_dec_hidden: 512                # ATAC 解码器隐藏维度
+  atac_dec_blocks: 1                  # ATAC 解码器残差块数
+  sfib_debug_mode: false              # 是否启用 SFIB 调试输出
+  model.sfib_debug_epochs:            # 指定调试输出轮次
   - 1
   - 10
   - 20
-  model.sfib_debug_every_n_epochs: 20
-train:
-  epochs: 1500
-  batch_size: 1
-  learning_rate: 1e-3
-  learning_rate_low: 1e-4
-  lr_switch_epoch: 1000
-  weight_decay: 1e-4
-  lambda_rna: 5.0
-  lambda_atac: 1.0
-  lambda_clip: 0.1
-  lambda_smooth: 0.1
-  fade_start_epoch: 800
-  fade_end_epoch: 1200
-  pos_weight_rna: 10.0
-  pos_weight_atac: 20.0
-  clip_temperature: 0.5
-  save_every: 50
-  device: cuda
-  log_interval: 10
-  log_tail_blank_lines: 5
-  best_name: ckpt_best.pth
+  model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
+train:                                # 训练配置
+  epochs: 1500                        # 训练轮数
+  batch_size: 1                       # 批大小（当前实现按全量）
+  learning_rate: 1e-3                 # 初始学习率
+  learning_rate_low: 1e-4             # 低学习率阶段学习率
+  lr_switch_epoch: 1000               # 学习率切换轮次
+  weight_decay: 1e-4                  # 权重衰减
+  lambda_rna: 5.0                     # RNA 重构损失权重
+  lambda_atac: 1.0                    # ATAC 重构损失权重
+  lambda_clip: 0.1                    # 对比损失权重
+  lambda_smooth: 0.1                  # 平滑损失权重
+  fade_start_epoch: 800               # CLIP 权重退火起始轮次
+  fade_end_epoch: 1200                # CLIP 权重退火结束轮次
+  pos_weight_rna: 10.0                # RNA 正样本加权
+  pos_weight_atac: 20.0               # ATAC 正样本加权
+  clip_temperature: 0.5               # CLIP 温度参数
+  save_every: 50                      # checkpoint 保存间隔
+  device: cuda                        # 训练设备
+  log_interval: 10                    # 日志打印间隔
+  log_tail_blank_lines: 5             # 训练结束后日志空行数
+  best_name: ckpt_best.pth            # 最优模型文件名

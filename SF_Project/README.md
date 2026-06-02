@@ -49,6 +49,33 @@ python run_pipeline.py --dataset <dataset_name> --steps evaluate --checkpoint ck
 SEED_OVERRIDE=123 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_train.py
 ```
 
+## 评估聚类外圈
+
+评估空间图默认不绘制聚类外圈，需要在配置中显式开启。
+
+完整配置示例：
+
+```yaml
+eval:
+  plotting:
+    cluster_outline:
+      enable: true
+      min_points: 10
+      line_width: 1.5
+      alpha: 0.8
+      use_cluster_colors: true
+      color: "#000000"
+      circle_fallback: true
+```
+
+简写开关（其余参数使用默认值）：
+
+```yaml
+eval:
+  plotting:
+    cluster_outline: true
+```
+
 ## MISAR 数据集命令
 
 ### e11.0 s1
@@ -148,11 +175,6 @@ python run_pipeline.py --dataset misar_e18_5_s1 --steps evaluate --checkpoint ck
 ./run_deterministic.sh configs/e18_5_s1/config_misar_e18_5_s1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 14
 ```
 
-兼容别名：
-
-```bash
-python run_pipeline.py --dataset misar_e18
-```
 
 ### e18.5 s2
 
@@ -169,22 +191,63 @@ python run_pipeline.py --dataset misar_e18_5_s2 --steps evaluate --checkpoint ck
 
 ## Mouse P22 命令
 
-```bash
-python run_pipeline.py --dataset mouse_brain_p22
-python run_pipeline.py --dataset mouse_brain_p22 --steps preprocess
-python run_pipeline.py --dataset mouse_brain_p22 --steps train
-python run_pipeline.py --dataset mouse_brain_p22 --steps evaluate --checkpoint ckpt_best.pth
+### mouse_brain_ATAC
 
-./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_preprocess.py
-./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_train.py
-./run_deterministic.sh configs/config_mouse_brain_p22.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```bash
+python run_pipeline.py --dataset mouse_brain_ATAC
+python run_pipeline.py --dataset mouse_brain_ATAC --steps preprocess
+python run_pipeline.py --dataset mouse_brain_ATAC --steps train
+python run_pipeline.py --dataset mouse_brain_ATAC --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml run_train.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_brain_H3K27ac
+
+```bash
+python run_pipeline.py --dataset mouse_brain_H3K27ac
+python run_pipeline.py --dataset mouse_brain_H3K27ac --steps preprocess
+python run_pipeline.py --dataset mouse_brain_H3K27ac --steps train
+python run_pipeline.py --dataset mouse_brain_H3K27ac --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27ac.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27ac.yaml run_train.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27ac.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_brain_H3K27me3
+
+```bash
+python run_pipeline.py --dataset mouse_brain_H3K27me3
+python run_pipeline.py --dataset mouse_brain_H3K27me3 --steps preprocess
+python run_pipeline.py --dataset mouse_brain_H3K27me3 --steps train
+python run_pipeline.py --dataset mouse_brain_H3K27me3 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27me3.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27me3.yaml run_train.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K27me3.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_brain_H3K4me3
+
+```bash
+python run_pipeline.py --dataset mouse_brain_H3K4me3
+python run_pipeline.py --dataset mouse_brain_H3K4me3 --steps preprocess
+python run_pipeline.py --dataset mouse_brain_H3K4me3 --steps train
+python run_pipeline.py --dataset mouse_brain_H3K4me3 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml run_train.py
+./run_deterministic.sh configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml run_evaluate.py --checkpoint ckpt_best.pth
 ```
 
 P22 专用范围评估会按 Cluster Moran's I 自动选择最优轮次，并只输出最优轮次图和 h5ad：
 
 ```bash
 python run_evaluate_range_p22.py --start 2500 --end 2600 --step 100
-python run_evaluate_range_p22.py --config configs/config_mouse_brain_p22.yaml --start 2500 --end 2600 --step 100
+python run_evaluate_range_p22.py --config configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml --start 2500 --end 2600 --step 100
 ```
 
 ## Renal 数据集命令
@@ -254,12 +317,67 @@ python run_pipeline.py --dataset human --steps evaluate --checkpoint ckpt_best.p
 ./run_deterministic.sh configs/config_human.yaml run_evaluate.py --checkpoint ckpt_best.pth
 ```
 
+## Human Lymph 数据集命令
+
+### human_lymph_A1
+
+```bash
+python run_pipeline.py --dataset human_lymph_A1
+python run_pipeline.py --dataset human_lymph_A1 --steps preprocess
+python run_pipeline.py --dataset human_lymph_A1 --steps train
+python run_pipeline.py --dataset human_lymph_A1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 10
+
+./run_deterministic.sh configs/human_lymph/config_human_lymph_A1.yaml run_preprocess.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph_A1.yaml run_train.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph_A1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 10
+```
+
+### human_lymph1
+
+```bash
+python run_pipeline.py --dataset human_lymph1
+python run_pipeline.py --dataset human_lymph1 --steps preprocess
+python run_pipeline.py --dataset human_lymph1 --steps train
+python run_pipeline.py --dataset human_lymph1 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 10
+
+./run_deterministic.sh configs/human_lymph/config_human_lymph1.yaml run_preprocess.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph1.yaml run_train.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph1.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 10
+```
+
+### human_lymph2
+
+```bash
+python run_pipeline.py --dataset human_lymph2
+python run_pipeline.py --dataset human_lymph2 --steps preprocess
+python run_pipeline.py --dataset human_lymph2 --steps train
+python run_pipeline.py --dataset human_lymph2 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 10
+
+./run_deterministic.sh configs/human_lymph/config_human_lymph2.yaml run_preprocess.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph2.yaml run_train.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph2.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 10
+```
+
+### human_lymph3
+
+```bash
+python run_pipeline.py --dataset human_lymph3
+python run_pipeline.py --dataset human_lymph3 --steps preprocess
+python run_pipeline.py --dataset human_lymph3 --steps train
+python run_pipeline.py --dataset human_lymph3 --steps evaluate --checkpoint ckpt_best.pth --n-clusters 10
+
+./run_deterministic.sh configs/human_lymph/config_human_lymph3.yaml run_preprocess.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph3.yaml run_train.py
+./run_deterministic.sh configs/human_lymph/config_human_lymph3.yaml run_evaluate.py --checkpoint ckpt_best.pth --n-clusters 10
+```
+
 ## 范围评估命令
 
 范围评估用于批量评估一段 checkpoint，例如 800 到 1500，每 100 轮评估一次：
 
 ```bash
 python run_evaluate_range.py --config configs/e18_5_s1/config_misar_e18_5_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
+python run_evaluate_range.py --config configs/human_lymph/config_human_lymph_A1.yaml --start 800 --end 1500 --step 100 --n-clusters 10
 python run_evaluate_range.py --config configs/e11_0_s1/config_misar_e11_0_s1.yaml --start 800 --end 1500 --step 100 --n-clusters 14
 python run_evaluate_range.py --config configs/renal/config_renal_Y7_T.yaml --start 1000 --end 3000 --step 200 --best-epoch 3000 --resolution 0.9
 ```
@@ -367,12 +485,105 @@ python -m scripts.pipeline.run_evaluate_translator_fusion \
 
 ## 配置文件索引
 
-数据集映射位于 `scripts/pipeline/run_pipeline.py` 的 `DATASET_CONFIG`。
+## 新增数据集命令
+
+### mouse_spleen1
+
+```bash
+python run_pipeline.py --dataset mouse_spleen1
+python run_pipeline.py --dataset mouse_spleen1 --steps preprocess
+python run_pipeline.py --dataset mouse_spleen1 --steps train
+python run_pipeline.py --dataset mouse_spleen1 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen1.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen1.yaml run_train.py
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen1.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_spleen2
+
+```bash
+python run_pipeline.py --dataset mouse_spleen2
+python run_pipeline.py --dataset mouse_spleen2 --steps preprocess
+python run_pipeline.py --dataset mouse_spleen2 --steps train
+python run_pipeline.py --dataset mouse_spleen2 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen2.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen2.yaml run_train.py
+./run_deterministic.sh configs/mouse_spleen/config_mouse_spleen2.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_thymus1
+
+```bash
+python run_pipeline.py --dataset mouse_thymus1
+python run_pipeline.py --dataset mouse_thymus1 --steps preprocess
+python run_pipeline.py --dataset mouse_thymus1 --steps train
+python run_pipeline.py --dataset mouse_thymus1 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus1.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus1.yaml run_train.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus1.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_thymus2
+
+```bash
+python run_pipeline.py --dataset mouse_thymus2
+python run_pipeline.py --dataset mouse_thymus2 --steps preprocess
+python run_pipeline.py --dataset mouse_thymus2 --steps train
+python run_pipeline.py --dataset mouse_thymus2 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus2.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus2.yaml run_train.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus2.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_thymus3
+
+```bash
+python run_pipeline.py --dataset mouse_thymus3
+python run_pipeline.py --dataset mouse_thymus3 --steps preprocess
+python run_pipeline.py --dataset mouse_thymus3 --steps train
+python run_pipeline.py --dataset mouse_thymus3 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus3.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus3.yaml run_train.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus3.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+### mouse_thymus4
+
+```bash
+python run_pipeline.py --dataset mouse_thymus4
+python run_pipeline.py --dataset mouse_thymus4 --steps preprocess
+python run_pipeline.py --dataset mouse_thymus4 --steps train
+python run_pipeline.py --dataset mouse_thymus4 --steps evaluate --checkpoint ckpt_best.pth
+
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus4.yaml run_preprocess.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus4.yaml run_train.py
+./run_deterministic.sh configs/mouse_thymus/config_mouse_thymus4.yaml run_evaluate.py --checkpoint ckpt_best.pth
+```
+
+数据集映射位于 `scripts/pipeline/run_pipeline.py` 的 `DATASET_CONFIG`，请使用精确数据集名。
 
 常用配置：
 
 - `configs/config_human.yaml`
-- `configs/config_mouse_brain_p22.yaml`
+- `configs/mouse_brain_p22/config_mouse_brain_ATAC.yaml`
+- `configs/mouse_brain_p22/config_mouse_brain_H3K27ac.yaml`
+- `configs/mouse_brain_p22/config_mouse_brain_H3K27me3.yaml`
+- `configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml`
+- `configs/mouse_spleen/config_mouse_spleen1.yaml`
+- `configs/mouse_spleen/config_mouse_spleen2.yaml`
+- `configs/mouse_thymus/config_mouse_thymus1.yaml`
+- `configs/mouse_thymus/config_mouse_thymus2.yaml`
+- `configs/mouse_thymus/config_mouse_thymus3.yaml`
+- `configs/mouse_thymus/config_mouse_thymus4.yaml`
+- `configs/human_lymph/config_human_lymph_A1.yaml`
+- `configs/human_lymph/config_human_lymph1.yaml`
+- `configs/human_lymph/config_human_lymph2.yaml`
+- `configs/human_lymph/config_human_lymph3.yaml`
 - `configs/renal/config_renal_R114_T.yaml`
 - `configs/renal/config_renal_Y7_T.yaml`
 - `configs/e11_0_s1/config_misar_e11_0_s1.yaml`

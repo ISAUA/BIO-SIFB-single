@@ -30,7 +30,7 @@ data:                                 # 数据配置
   files:                              # 原始文件定义
     rna_h5ad: "adata_RNA.h5ad"        # RNA h5ad 文件名
     atac_h5ad: "adata_Peak.h5ad"      # ATAC h5ad 文件名
-    gtf: "../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
+    gtf: "../../gencode.vM23.annotation.gtf.gz" # GTF 注释文件（MISAR通用）
   parameters:                         # 预处理超参数
     reduce:                         # 降维加速设置
       mode: "gpu_safe"            # cpu|gpu_safe|gpu_full（默认稳定优先）

@@ -103,14 +103,28 @@ def filter_peaks_by_tss(adata, gtf_path, rna_genes, window=100000, n_final=30000
       gene_peak_mask: scipy.sparse.coo_matrix, shape = (len(rna_genes), n_peaks_kept)
     """
     print(f"Executing Physical Association Filter (Window = +/- {window}bp)...")
+    stats = {
+        "gtf_path": str(gtf_path),
+        "window": int(window),
+        "rna_gene_count": int(len(rna_genes) if rna_genes is not None else 0),
+        "matched_gene_count": 0,
+        "peaks_before": int(adata.shape[1]),
+        "peaks_valid": 0,
+        "peaks_retained": 0,
+        "fallback_used": False,
+        "status": "started",
+    }
     
     # 1. 准备 GTF 数据
     gene_tss = parse_gtf_tss(gtf_path)
     target_genes = sorted(set(rna_genes) & set(gene_tss.keys()))
+    stats["matched_gene_count"] = int(len(target_genes))
     print(f"Matching {len(target_genes)} RNA genes to Peaks...")
     
     if len(target_genes) == 0:
         print("Warning: No matching genes found between RNA data and GTF file!")
+        stats["status"] = "no_matching_genes"
+        adata.uns["gtf_filter_stats"] = stats
         return adata, None
 
     # 2. 解析 Peak 坐标
@@ -121,11 +135,15 @@ def filter_peaks_by_tss(adata, gtf_path, rna_genes, window=100000, n_final=30000
     
     # 移除解析失败的 Peaks (None)
     valid_peaks_mask = peaks_df['chrom'].notna()
+    stats["peaks_valid"] = int(valid_peaks_mask.sum())
     peaks_df = peaks_df[valid_peaks_mask]
     
     if len(peaks_df) == 0:
         print("Error: Failed to parse any peak coordinates! Check 'DEBUG' output above.")
-        return adata[:, []], None  # Return empty to trigger error safely
+        stats["status"] = "no_valid_peaks"
+        empty_adata = adata[:, []].copy()
+        empty_adata.uns["gtf_filter_stats"] = stats
+        return empty_adata, None  # Return empty to trigger error safely
 
     # 3. 筛选逻辑，记录 gene-peak 对应关系
     keep_names_set = set()
@@ -158,12 +176,18 @@ def filter_peaks_by_tss(adata, gtf_path, rna_genes, window=100000, n_final=30000
             row_indices.append(row_idx)
             col_names.append(peak_name)
         
+    stats["peaks_retained"] = int(len(keep_names_set))
     print(f"Retained {len(keep_names_set)} peaks out of {adata.shape[1]}")
     
     if len(keep_names_set) == 0:
         print("⚠️ Warning: Physical filter removed ALL peaks. Falling back to retaining TOP variance peaks to prevent crash.")
         fallback_n = min(n_final, adata.shape[1])
-        return adata[:, :fallback_n].copy(), None
+        stats["fallback_used"] = True
+        stats["peaks_retained"] = int(fallback_n)
+        stats["status"] = "fallback_top_variance"
+        fallback_adata = adata[:, :fallback_n].copy()
+        fallback_adata.uns["gtf_filter_stats"] = stats
+        return fallback_adata, None
 
     # 按原始顺序保留峰，保证列顺序可追踪
     kept_peaks_in_order = [p for p in adata.var_names if p in keep_names_set]
@@ -182,6 +206,9 @@ def filter_peaks_by_tss(adata, gtf_path, rna_genes, window=100000, n_final=30000
         data = np.ones(len(col_indices), dtype=np.float32)
         shape = (len(rna_genes), len(kept_peaks_in_order))
         gene_peak_mask = sparse.coo_matrix((data, (row_indices, col_indices)), shape=shape, dtype=np.float32)
+
+    stats["status"] = "ok"
+    filtered_adata.uns["gtf_filter_stats"] = stats
 
     return filtered_adata, gene_peak_mask
 
@@ -249,6 +276,7 @@ def process_atac_pipeline(
         adata, gene_peak_mask = filter_peaks_by_tss(adata, gtf_path, rna_genes, window=window, n_final=n_final)
         
         # 二次筛选
+        selected_idx = None
         if adata.shape[1] > n_final:
             print(f"Downsampling to {n_final} peaks...")
             sc.pp.highly_variable_genes(adata, flavor="cell_ranger", n_top_genes=n_final)
@@ -261,9 +289,11 @@ def process_atac_pipeline(
                 hvg_mask = mask_trim
 
             adata = adata[:, hvg_mask].copy()
-            if gene_peak_mask is not None:
-                # 同步裁剪掩码的列
-                selected_idx = np.nonzero(hvg_mask)[0]
+            selected_idx = np.nonzero(hvg_mask)[0]
+        if "gtf_filter_stats" in adata.uns:
+            adata.uns["gtf_filter_stats"]["peaks_after_downsample"] = int(adata.shape[1])
+            if gene_peak_mask is not None and selected_idx is not None:
+                # 同步裁剪掩码的列（仅当发生二次筛选）
                 gene_peak_mask = gene_peak_mask.tocsr()[:, selected_idx]
 
     # 4. TF-IDF

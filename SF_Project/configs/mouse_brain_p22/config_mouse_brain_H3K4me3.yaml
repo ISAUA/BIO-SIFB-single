@@ -1,12 +1,12 @@
 project:                              # 项目级配置
-  name: "SF_MOUSE_BRAIN_P22_Analysis"  # 项目名称，用于日志与输出标识
+  name: "SF_MOUSE_BRAIN_P22_H3K4me3_Analysis"  # 项目名称，用于日志与输出标识
   version: "1.0.0"                    # 配置版本号
   seed: 42                             # 全局随机种子，保证尽可能可复现
-  save_dir: "./results/mouse_brain_p22/checkpoints/"  # 训练 checkpoint 保存目录
-  eval_dir: "./results/mouse_brain_p22/predictions/"  # 评估结果与图像输出目录
+  save_dir: "./results/mouse_brain_p22/mouse_brain_H3K4me3/checkpoints/"  # 训练 checkpoint 保存目录
+  eval_dir: "./results/mouse_brain_p22/mouse_brain_H3K4me3/predictions/"  # 评估结果与图像输出目录
 
 eval:                                  # 评估配置
-  checkpoint: "1500"                  # 默认使用的 checkpoint key
+  checkpoint: "ckpt_2000.pth"                  # 默认使用的 checkpoint key
   n_clusters: 18                       # mclust/聚类目标簇数
   mclust_pca_dim: 20                   # 聚类前 PCA 降维维度
   resolution: 0.9                      # Leiden 分辨率，mclust 失败时回退可用
@@ -18,20 +18,21 @@ eval:                                  # 评估配置
     panel_size: [6, 6]                 # 单个面板尺寸
     umap_point_size: 60                # UMAP 点大小
     spatial_point_size: 80             # 空间散点图点大小
+    spatial_rotate_deg: 90             # 空间图顺时针旋转角度
     alpha: 1.0                         # 绘图透明度
     legend_loc: "on data"             # 图例位置
     palette_mode: "high_contrast"     # 调色板模式
   checkpoints:                          # checkpoint 映射表
     best: "ckpt_best.pth"              # 最优模型文件名
-    final: "ckpt_300.pth"              # 最终轮次模型文件名
+    final: "ckpt_2000.pth"              # 最终轮次模型文件名
 
 data:                                  # 数据配置
-  raw_path: "data/raw/mouse_brain_p22"  # 原始数据目录
-  processed_path: "data/processed/mouse_brain_p22"  # 预处理输出目录
+  raw_path: "data/raw/mouse_brain_p22/mouse_brain_H3K4me3"  # 原始数据目录
+  processed_path: "data/processed/mouse_brain_p22/mouse_brain_H3K4me3"  # 预处理输出目录
   files:                                # 原始文件名定义
     rna_h5ad: "adata_RNA.h5ad"         # RNA h5ad 文件名
     atac_h5ad: "adata_Peaks.h5ad"      # ATAC h5ad 文件名
-    gtf: "../misar/gencode.vM23.annotation.gtf.gz"  # GTF 注释文件路径
+    gtf: "../../gencode.vM23.annotation.gtf.gz"  # GTF 注释文件路径
   parameters:                           # 预处理超参数
     reduce:                             # 降维加速设置
       mode: "cpu"                      # 降维模式：cpu / gpu_safe / gpu_full
@@ -105,9 +106,9 @@ train:                                 # 训练配置
 translation:                           # 翻译专项配置（Stage 2 / Stage 3.5）
   stage2:                              # 翻译器训练配置
     data:                              # 训练数据来源
-      config: "configs/config_mouse_brain_p22.yaml"  # Stage2 训练用配置文件
+      config: "configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml"  # Stage2 训练用配置文件
     backbone:                          # 冻结主干来源
-      config: "configs/config_mouse_brain_p22.yaml"  # 主干配置文件
+      config: "configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml"  # 主干配置文件
       checkpoint: "best"               # 主干 checkpoint key 或文件名
     model:                             # 翻译器结构
       n_blocks: 3                      # SF_Translator_R2A 残差 MLP 层数
@@ -125,7 +126,7 @@ translation:                           # 翻译专项配置（Stage 2 / Stage 3.
 
   stage35:                             # 翻译评估配置
     backbone:                          # 评估时冻结主干来源
-      config: "configs/config_mouse_brain_p22.yaml"  # 主干配置文件
+      config: "configs/mouse_brain_p22/config_mouse_brain_H3K4me3.yaml"  # 主干配置文件
       checkpoint: "best"               # 主干 checkpoint key 或文件名
     metrics:                           # 评估指标参数
       n_clusters: 18                   # mclust 目标簇数

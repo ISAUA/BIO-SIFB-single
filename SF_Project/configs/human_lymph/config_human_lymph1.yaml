@@ -1,25 +1,25 @@
 project:                              # 项目级配置
-  name: "SF_SIMULATION3_Analysis"    # 项目名称
+  name: "SF_Human_Lymph_1_Analysis"  # 项目名称
   version: "1.0.0"                   # 配置版本
   seed: 42                            # 随机种子
-  save_dir: "./results/simulation/simulation3/checkpoints/"   # 训练 checkpoint 输出目录
-  eval_dir: "./results/simulation/simulation3/predictions/"    # 评估输出目录
+  save_dir: "./results/human_lymph/human_lymph1/checkpoints/"   # 训练 checkpoint 输出目录
+  eval_dir: "./results/human_lymph/human_lymph1/predictions/"    # 评估输出目录
 
 eval:                                 # 评估配置
   checkpoint: "best"                 # 默认评估 checkpoint key
-  n_clusters: 14                      # mclust 聚类簇数
+  n_clusters: 10                      # mclust 聚类簇数
   mclust_pca_dim: 20                  # mclust 前 PCA 维度
   resolution: 0.9                     # Leiden 分辨率
   moran_k: 6                          # Moran's I 邻居数
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
-    final: "ckpt_300.pth"            # 最终/指定轮次 checkpoint 文件名
+    final: "ckpt_1500.pth"            # 最终/指定轮次 checkpoint 文件名
 
-data:                             # 数据配置
-  raw_path: "/root/autodl-tmp/BIO-SFIB-single/SF_Project/data/raw/simulation/Simulation3"    # 原始数据目录
-  processed_path: "/root/autodl-tmp/BIO-SFIB-single/SF_Project/data/processed/simulation/simulation3"  # 预处理输出目录
+data:                                 # 数据配置
+  raw_path: "/root/autodl-tmp/BIO-SFIB-single/SF_Project/data/raw/Human_Lymph/human_lymph1"    # 原始数据目录
+  processed_path: "/root/autodl-tmp/BIO-SFIB-single/SF_Project/data/processed/Human_Lymph/human_lymph1"  # 预处理输出目录
   files:                              # 原始文件定义
-    rna_h5ad: "adata_RNA.h5ad"        # RNA h5ad 文件名
+    rna_h5ad: "s1_adata_rna.h5ad"        # RNA h5ad 文件名
   parameters:                         # 预处理超参数
     reduce:                           # 降维加速设置
       mode: "cpu"                    # cpu|gpu_safe|gpu_full
@@ -27,23 +27,23 @@ data:                             # 数据配置
       q_offset: 8                    # 低秩分解冗余维度
       niter: 3                        # 低秩迭代次数
     n_top_genes: 3000                 # RNA 高变基因数
-    rna_use_pca: false                 # RNA 是否使用 PCA 降维
+    rna_use_pca: true                 # RNA 是否使用 PCA 降维
     rna_pca_dim: 512                  # RNA 降维维度
     rna_min_cells: 3                  # RNA 基因最小细胞数过滤
     rna_target_sum: 1e4               # RNA 归一化目标总和
     knn_k: 9                          # 空间图 k 近邻
-    use_rna_similarity_edge_weight: true  # 是否启用基于 RNA 相似度的边权重
-    ground_truth_key: "ground_truth"      # 真实标签列名（无则留空）
+    use_rna_similarity_edge_weight: false  # 是否启用基于 RNA 相似度的边权重
+    ground_truth_key: "final_annot"            # 真实标签列名（无则留空）
 
 adt_preprocess:                       # ADT 专用配置
   use_adt: true                       # 是否启用 ADT 通道
-  adt_data_path: "adata_ADT.h5ad"    # ADT h5ad 文件名
+  adt_data_path: "s1_adata_adt.h5ad"    # ADT h5ad 文件名
   apply_clr: true                    # CLR 变换开关（当前关闭）
   clip_nonnegative: true             # 是否将 ADT 特征裁剪为非负
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称
-  n_freq_components: 3000             # 高频傅里叶特征数
+  n_freq_components: 1000             # 高频傅里叶特征数
   rna_in_dim: 3000                    # RNA 输入维度
   hidden_dim: 512                     # 主干隐藏维度
   rna_n_heads: 4                      # RNA 分支注意力头数
@@ -56,33 +56,31 @@ model:                                # 模型结构配置
   sfib_dim: 128                       # SFIB 特征维度
   sfib_ino_layers: 2                  # SFIB INO 层数
   ino_use_edge_weight: true           # INO 是否使用边权重
-  ino_pre_smooth_enable: true         # INO 前是否启用预平滑
+  ino_pre_smooth_enable: false        # INO 前是否启用预平滑
   ino_pre_smooth_alpha: 0.8           # 预平滑保真系数 alpha
   proj_hidden_dim: 64                 # 对比投影头隐藏维度
   proj_output_dim: 64                 # 对比投影头输出维度
   rna_dec_hidden: 512                 # RNA 解码器隐藏维度
   rna_dec_blocks: 1                   # RNA 解码器残差块数
-  atac_dec_hidden: 64                # 第二模态解码器隐藏维度
+  atac_dec_hidden: 64                 # 第二模态解码器隐藏维度
   atac_dec_blocks: 1                  # 第二模态解码器残差块数
   sfib_debug_mode: false              # 是否启用 SFIB 调试输出
   model.sfib_debug_epochs: [1, 10, 20] # 指定调试输出轮次
   model.sfib_debug_every_n_epochs: 20 # 调试输出间隔轮次
 
 train:                                # 训练配置
-  epochs: 1000                        # 训练轮数
+  epochs: 1500                        # 训练轮数
   batch_size: 1                       # 批大小（当前实现按全量）
   learning_rate: 1e-3                 # 初始学习率
   learning_rate_low: 1e-4             # 低学习率阶段学习率
-  lr_switch_epoch: 800               # 学习率切换轮次
+  lr_switch_epoch: 1000               # 学习率切换轮次
   weight_decay: 1e-4                  # 权重衰减
   lambda_rna: 5.0                     # RNA 重构损失权重
-  lambda_atac: 1.0                    # 第二模态重构损失权重
-  lambda_clip: 0.5                    # 对比损失权重
+  lambda_atac: 1                    # 第二模态重构损失权重
+  lambda_clip: 2                    # 对比损失权重
   lambda_smooth: 1.0                  # 平滑损失权重
-  fade_start_epoch: 800              # CLIP 权重退火起始轮次
-  fade_end_epoch: 1000                # CLIP 权重退火结束轮次
-  pos_weight_rna: 10.0                # RNA 正样本加权
-  pos_weight_adt: 1.0                 # ADT 正样本加权
+  fade_start_epoch: 1500              # CLIP 权重退火起始轮次
+  fade_end_epoch: 1500                # CLIP 权重退火结束轮次
   clip_temperature: 0.5               # CLIP 温度参数
   save_every: 50                      # checkpoint 保存间隔
   device: "cuda"                     # 训练设备

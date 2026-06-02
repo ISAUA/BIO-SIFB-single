@@ -39,6 +39,7 @@ adt_preprocess:                       # ADT 专用配置
   use_adt: true                       # 是否启用 ADT 通道
   adt_data_path: "adata_ADT.h5ad"    # ADT h5ad 文件名
   apply_clr: true                    # CLR 变换开关（当前关闭）
+  clip_nonnegative: true             # 是否将 ADT 特征裁剪为非负
 
 model:                                # 模型结构配置
   name: "SFNet"                      # 模型名称

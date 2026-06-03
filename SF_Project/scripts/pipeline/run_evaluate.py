@@ -41,7 +41,7 @@ from sklearn.metrics import (
 )
 from sklearn.decomposition import PCA
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
-from sf_model.utils import set_seed
+from sf_model.utils import calculate_silhouette_safe, set_seed
 
 # 引入模型
 from sf_model.model.bio_sfinet import BioSFINet
@@ -472,34 +472,36 @@ def visualize_and_save(
     # 无侵入式聚合度评估 (Moran's I) - 不打印终端，仅用于顶部图标题
     # ==============================================================================
     moran_title_str = ""
-    mi_latent_avg = None
     mi_cluster_avg = None
     cluster_scores = None
-    try:
-        # 评估视角 1：连续隐特征 z_final 的平均空间自相关性
-        mi_latent_avg, _ = calculate_spatial_morans_i(coords_moran, z_final, k=moran_k)
+    silhouette_val = np.nan
 
-        # 评估视角 2：离散聚类标签的空间连贯性
-        cluster_labels = adata.obs['cluster'].values.astype(int)
+    # 评估视角 1：离散聚类标签的空间连贯性
+    cluster_labels = adata.obs['cluster'].values.astype(int)
+    silhouette_val = calculate_silhouette_safe(z_final, cluster_labels, max_samples=10000)
+    print(f"Silhouette Score: {silhouette_val:.4f}")
+    moran_title_str = f" | Silh: {silhouette_val:.3f}"
+
+    try:
+        # 评估视角 2：Cluster Moran's I
         # mclust labels are often 1-based; use categorical codes to avoid adding an extra all-zero column.
         num_clusters = int(np.unique(cluster_labels).shape[0])
         one_hot_clusters = np.eye(num_clusters)[pd.Categorical(cluster_labels).codes]
         mi_cluster_avg, _ = calculate_spatial_morans_i(coords_moran, one_hot_clusters, k=moran_k)
-
-        moran_title_str = f" | Latent Moran's I: {mi_latent_avg:.4f} | Cluster Moran's I: {mi_cluster_avg:.4f}"
-
-        cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
-        if cluster_scores is not None:
-            moran_title_str += (
-                f" | ARI: {cluster_scores['ARI']:.4f}"
-                f" | NMI: {cluster_scores['NMI']:.4f}"
-                f" | AMI: {cluster_scores['AMI']:.4f}"
-                f" | HOM: {cluster_scores['HOM']:.4f}"
-            )
+        moran_title_str = f" | Cluster Moran's I: {mi_cluster_avg:.4f} | Silh: {silhouette_val:.3f}"
     except Exception as e:
-        moran_title_str = " | Moran's I skipped"
+        moran_title_str = f" | Moran's I skipped | Silh: {silhouette_val:.3f}"
         if logger is not None:
             logger.warning("Moran's I computation skipped for %s: %s", checkpoint_name or "default", str(e))
+
+    cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
+    if cluster_scores is not None:
+        moran_title_str += (
+            f" | ARI: {cluster_scores['ARI']:.4f}"
+            f" | NMI: {cluster_scores['NMI']:.4f}"
+            f" | AMI: {cluster_scores['AMI']:.4f}"
+            f" | HOM: {cluster_scores['HOM']:.4f}"
+        )
     # ==============================================================================
 
     # 3. 绘图 (UMAP + Spatial)
@@ -628,11 +630,11 @@ def visualize_and_save(
 
     if logger is not None:
         logger.info(
-            "Eval metrics | checkpoint=%s | epoch=%s | latent_moran=%s | cluster_moran=%s",
+            "Eval metrics | checkpoint=%s | epoch=%s | cluster_moran=%s | silhouette=%s",
             ckpt_tag,
             metric_tag,
-            _fmt_metric(mi_latent_avg),
             _fmt_metric(mi_cluster_avg),
+            _fmt_metric(silhouette_val),
         )
 
     if cluster_scores is not None:

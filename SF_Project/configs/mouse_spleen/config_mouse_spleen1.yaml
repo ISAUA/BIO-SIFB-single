@@ -11,6 +11,8 @@ eval:                                 # 评估配置
   mclust_pca_dim: 20                  # mclust 前 PCA 维度
   resolution: 0.9                     # Leiden 分辨率
   moran_k: 6                          # Moran's I 邻居数
+  plotting:                             # 绘图相关参数
+    spatial_rotate_deg: 180             # 空间图顺时针旋转角度  
   checkpoints:                        # checkpoint 映射表
     best: "ckpt_best.pth"            # 最优 checkpoint 文件名
     final: "ckpt_1500.pth"           # 最终/指定轮次 checkpoint 文件名

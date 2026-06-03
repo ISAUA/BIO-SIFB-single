@@ -43,7 +43,7 @@ from sklearn.decomposition import PCA
 from shapely.geometry import MultiPoint, Polygon, MultiPolygon
 
 from sf_model.model.bio_sfinet import BioSFINet
-from sf_model.utils import set_seed
+from sf_model.utils import calculate_silhouette_safe, set_seed
 
 
 def load_config(config_path="configs/config_human.yaml"):
@@ -467,14 +467,16 @@ def visualize_and_save(
         raise ValueError(f"Unsupported moran_mode={moran_mode}. Use one of: both, cluster_only, none.")
 
     moran_title_str = ""
-    mi_latent_avg = None
     mi_cluster_avg = None
     cluster_scores = None
+    silhouette_val = np.nan
+
+    cluster_labels = adata.obs["cluster"].values.astype(int)
+    silhouette_val = calculate_silhouette_safe(z_final, cluster_labels)
+    moran_title_str = f" | Silh: {silhouette_val:.3f}"
+
     try:
-        cluster_labels = adata.obs["cluster"].values.astype(int)
-
-        if moran_mode == "both":
-            mi_latent_avg, _ = calculate_spatial_morans_i(coords_moran, z_final, k=moran_k)
+        if moran_mode in {"both", "cluster_only"}:
             if precomputed_cluster_moran is None:
                 num_clusters = np.max(cluster_labels) + 1
                 one_hot_clusters = np.eye(num_clusters)[cluster_labels]
@@ -482,32 +484,20 @@ def visualize_and_save(
             else:
                 mi_cluster_avg = float(precomputed_cluster_moran)
 
-            moran_title_str = (
-                f" | Latent Moran's I: {mi_latent_avg:.4f}"
-                f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
-            )
-        elif moran_mode == "cluster_only":
-            if precomputed_cluster_moran is None:
-                num_clusters = np.max(cluster_labels) + 1
-                one_hot_clusters = np.eye(num_clusters)[cluster_labels]
-                mi_cluster_avg, _ = calculate_spatial_morans_i(coords_moran, one_hot_clusters, k=moran_k)
-            else:
-                mi_cluster_avg = float(precomputed_cluster_moran)
-
-            moran_title_str = f" | Cluster Moran's I: {mi_cluster_avg:.4f}"
-
-        cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
-        if cluster_scores is not None:
-            moran_title_str += (
-                f" | ARI: {cluster_scores['ARI']:.4f}"
-                f" | NMI: {cluster_scores['NMI']:.4f}"
-                f" | AMI: {cluster_scores['AMI']:.4f}"
-                f" | HOM: {cluster_scores['HOM']:.4f}"
-            )
+            moran_title_str = f" | Cluster Moran's I: {mi_cluster_avg:.4f} | Silh: {silhouette_val:.3f}"
     except Exception as e:
-        moran_title_str = " | Moran's I skipped"
+        moran_title_str = f" | Moran's I skipped | Silh: {silhouette_val:.3f}"
         if logger is not None:
             logger.warning("Moran's I computation skipped for %s: %s", output_suffix or "default", str(e))
+
+    cluster_scores = calculate_clustering_scores(cluster_labels, ground_truth)
+    if cluster_scores is not None:
+        moran_title_str += (
+            f" | ARI: {cluster_scores['ARI']:.4f}"
+            f" | NMI: {cluster_scores['NMI']:.4f}"
+            f" | AMI: {cluster_scores['AMI']:.4f}"
+            f" | HOM: {cluster_scores['HOM']:.4f}"
+        )
 
     plot_cfg = plot_cfg or {}
     panel_size = plot_cfg.get("panel_size", [6, 6])
@@ -609,12 +599,12 @@ def visualize_and_save(
 
     if logger is not None:
         logger.info(
-            "Eval metrics (%s) | checkpoint=%s | epoch=%s | latent_moran=%s | cluster_moran=%s",
+            "Eval metrics (%s) | checkpoint=%s | epoch=%s | cluster_moran=%s | silhouette=%s",
             suffix,
             ckpt_tag,
             metric_tag,
-            _fmt_metric(mi_latent_avg),
             _fmt_metric(mi_cluster_avg),
+            _fmt_metric(silhouette_val),
         )
 
     if cluster_scores is not None:
@@ -635,8 +625,8 @@ def visualize_and_save(
             logger.warning("Ground truth unavailable or invalid for %s; skip ARI/NMI/AMI/HOM.", suffix)
 
     metrics_payload = {
-        "latent_moran": None if mi_latent_avg is None else float(mi_latent_avg),
         "cluster_moran": None if mi_cluster_avg is None else float(mi_cluster_avg),
+        "Silhouette": None if np.isnan(silhouette_val) else float(silhouette_val),
         "ARI": None if cluster_scores is None else float(cluster_scores["ARI"]),
         "NMI": None if cluster_scores is None else float(cluster_scores["NMI"]),
         "AMI": None if cluster_scores is None else float(cluster_scores["AMI"]),
@@ -747,6 +737,7 @@ def main():
                 "best_suffix": suffix,
                 "is_loss_best_row": is_loss_best_row,
                 "cluster_moran": np.nan,
+                "Silhouette": np.nan,
                 "ARI": np.nan,
                 "NMI": np.nan,
                 "AMI": np.nan,
@@ -800,6 +791,7 @@ def main():
                 "best_suffix": suffix,
                 "is_loss_best_row": is_loss_best_row,
                 "cluster_moran": np.nan if metrics_payload["cluster_moran"] is None else float(metrics_payload["cluster_moran"]),
+                "Silhouette": np.nan if metrics_payload["Silhouette"] is None else float(metrics_payload["Silhouette"]),
                 "ARI": np.nan if metrics_payload["ARI"] is None else float(metrics_payload["ARI"]),
                 "NMI": np.nan if metrics_payload["NMI"] is None else float(metrics_payload["NMI"]),
                 "AMI": np.nan if metrics_payload["AMI"] is None else float(metrics_payload["AMI"]),
@@ -817,6 +809,7 @@ def main():
                 "best_suffix": suffix,
                 "is_loss_best_row": is_loss_best_row,
                 "cluster_moran": np.nan,
+                "Silhouette": np.nan,
                 "ARI": np.nan,
                 "NMI": np.nan,
                 "AMI": np.nan,
@@ -839,6 +832,7 @@ def main():
             "best_suffix",
             "is_loss_best_row",
             "cluster_moran",
+            "Silhouette",
             "ARI",
             "NMI",
             "AMI",

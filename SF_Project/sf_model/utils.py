@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import numpy as np
 import scipy.sparse as sp
 from sklearn.neighbors import NearestNeighbors
+from sklearn.metrics import silhouette_score
 
 # def build_spatial_graph(coords, k=10):
 #     """
@@ -185,6 +186,40 @@ def build_spatial_graph(coords, features=None, k=6, device=None, n_freq_componen
     edge_weight = torch.FloatTensor(weights)
 
     return edge_index, edge_weight, u_basis, evals
+
+
+def calculate_silhouette_safe(features, labels, max_samples=10000, random_state=42):
+    """
+    计算轮廓系数 (Silhouette Score)。
+    如果样本量大于 max_samples，则使用无放回随机降采样，以防止计算 OOM。
+    """
+    features = np.asarray(features)
+    labels = np.asarray(labels)
+    n_samples = features.shape[0]
+
+    if labels.shape[0] != n_samples or n_samples < 2:
+        return np.nan
+
+    unique_labels = np.unique(labels)
+    if unique_labels.size < 2:
+        return np.nan
+
+    max_samples = int(max_samples) if max_samples is not None else None
+    if max_samples is not None and n_samples > max_samples:
+        rng = np.random.default_rng(int(random_state))
+        indices = rng.choice(n_samples, max_samples, replace=False)
+        features_to_use = features[indices]
+        labels_to_use = labels[indices]
+    else:
+        features_to_use = features
+        labels_to_use = labels
+
+    try:
+        score = silhouette_score(features_to_use, labels_to_use)
+        return float(score)
+    except Exception as e:
+        print(f"[Warning] Silhouette calculation failed: {e}")
+        return np.nan
 
 
 
